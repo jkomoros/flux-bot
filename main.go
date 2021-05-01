@@ -18,9 +18,18 @@ func init() {
 const APP_NAME = "gale-x-bot"
 const TOKEN_ENV_NAME = "BOT_TOKEN"
 
+//The name of the category this will look for that contains things this should treat as threads
+const THREAD_CATEGORY_NAME = "Threads"
+
 var token string
 
-type bot struct{}
+type bot struct {
+	guildInfos map[string]*guildInfo
+}
+
+type guildInfo struct {
+	threadCategoryID string
+}
 
 func main() {
 
@@ -43,7 +52,7 @@ func main() {
 	// Register ready as a callback for the ready events.
 	newBot(dg)
 
-	dg.Identify.Intents = discordgo.IntentsGuildMessages
+	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages
 
 	// Open the websocket and begin listening.
 	err = dg.Open()
@@ -62,8 +71,11 @@ func main() {
 }
 
 func newBot(s *discordgo.Session) *bot {
-	result := &bot{}
+	result := &bot{
+		guildInfos: make(map[string]*guildInfo),
+	}
 	s.AddHandler(result.ready)
+	s.AddHandler(result.guildCreate)
 	s.AddHandler(result.messageCreate)
 	return result
 }
@@ -71,9 +83,11 @@ func newBot(s *discordgo.Session) *bot {
 // This function will be called (due to AddHandler above) when the bot receives
 // the "ready" event from Discord.
 func (b *bot) ready(s *discordgo.Session, event *discordgo.Ready) {
+	fmt.Println("Ready and waiting!")
+}
 
-	fmt.Println("Hello, world!")
-
+func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
+	b.inductGuild(event.Guild)
 }
 
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
@@ -83,4 +97,37 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 		return
 	}
 	fmt.Println(event.Message.Content + " posted in " + channel.Name)
+}
+
+func (b *bot) inductGuild(guild *discordgo.Guild) {
+
+	var threadsCategory *discordgo.Channel
+
+	for _, channel := range guild.Channels {
+		if channel.Type != discordgo.ChannelTypeGuildCategory {
+			continue
+		}
+		if channel.Name == THREAD_CATEGORY_NAME {
+			threadsCategory = channel
+			continue
+		}
+	}
+
+	if threadsCategory == nil {
+		fmt.Println(guild.Name + " (ID " + guild.ID + ") joined but didn't have a category named " + THREAD_CATEGORY_NAME)
+		return
+	}
+
+	fmt.Println("Found " + THREAD_CATEGORY_NAME + "category in guild " + nameForGuild(guild))
+
+	info := &guildInfo{
+		threadCategoryID: threadsCategory.ID,
+	}
+
+	b.guildInfos[guild.ID] = info
+
+}
+
+func nameForGuild(guild *discordgo.Guild) string {
+	return guild.Name + " (" + guild.ID + ")"
 }
