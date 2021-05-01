@@ -20,6 +20,8 @@ const TOKEN_ENV_NAME = "BOT_TOKEN"
 
 var token string
 
+type bot struct{}
+
 func main() {
 
 	if token == "" {
@@ -39,8 +41,7 @@ func main() {
 	}
 
 	// Register ready as a callback for the ready events.
-	dg.AddHandler(ready)
-	dg.AddHandler(messageCreate)
+	newBot(dg)
 
 	dg.Identify.Intents = discordgo.IntentsGuildMessages
 
@@ -60,14 +61,22 @@ func main() {
 	dg.Close()
 }
 
-// This function will be called (due to AddHandler above) when the bot receives
-// the "ready" event from Discord.
-func ready(s *discordgo.Session, event *discordgo.Ready) {
-
-	fmt.Println("Hello, world!")
+func newBot(s *discordgo.Session) *bot {
+	result := &bot{}
+	s.AddHandler(result.ready)
+	s.AddHandler(result.messageCreate)
+	return result
 }
 
-func messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
+// This function will be called (due to AddHandler above) when the bot receives
+// the "ready" event from Discord.
+func (b *bot) ready(s *discordgo.Session, event *discordgo.Ready) {
+
+	fmt.Println("Hello, world!")
+
+}
+
+func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
 	channel, err := s.Channel(event.ChannelID)
 	if err != nil {
 		fmt.Println("Couldn't find channel")
