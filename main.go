@@ -100,18 +100,25 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 		fmt.Println("Couldn't find channel")
 		return
 	}
-	gi := b.guildInfos[event.GuildID]
-	if gi == nil {
-		//Must be a message from a server without a Threads category
-		return
-	}
-	if channel.ParentID != gi.threadCategoryID {
-		//A message outside of Threads category
+	if !b.isThread(channel) {
 		return
 	}
 	if err := b.moveThreadToTopOfThreads(channel); err != nil {
 		fmt.Printf("message received in a thread but couldn't move it: %v", err)
 	}
+}
+
+func (b *bot) isThread(channel *discordgo.Channel) bool {
+	gi := b.guildInfos[channel.GuildID]
+	if gi == nil {
+		//Must be a message from a server without a Threads category
+		return false
+	}
+	if channel.ParentID != gi.threadCategoryID {
+		//A message outside of Threads category
+		return false
+	}
+	return true
 }
 
 func (b *bot) inductGuild(guild *discordgo.Guild) {
