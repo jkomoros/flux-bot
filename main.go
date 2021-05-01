@@ -24,6 +24,7 @@ const THREAD_CATEGORY_NAME = "Threads"
 var token string
 
 type bot struct {
+	session    *discordgo.Session
 	guildInfos map[string]*guildInfo
 }
 
@@ -72,6 +73,7 @@ func main() {
 
 func newBot(s *discordgo.Session) *bot {
 	result := &bot{
+		session:    s,
 		guildInfos: make(map[string]*guildInfo),
 	}
 	s.AddHandler(result.ready)
@@ -107,7 +109,9 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 		//A message outside of Threads category
 		return
 	}
-	fmt.Println(event.Message.Content + " posted in " + channel.Name + " which is within the " + THREAD_CATEGORY_NAME + " category")
+	if err := b.moveThreadToTopOfThreads(channel); err != nil {
+		fmt.Printf("message received in a thread but couldn't move it: %v", err)
+	}
 }
 
 func (b *bot) inductGuild(guild *discordgo.Guild) {
@@ -139,6 +143,52 @@ func (b *bot) inductGuild(guild *discordgo.Guild) {
 
 }
 
+func (b *bot) moveThreadToTopOfThreads(thread *discordgo.Channel) error {
+
+	fmt.Println("Popping thread " + nameForThread(thread) + " to top because it received a new message")
+
+	guild, err := b.session.State.Guild(thread.GuildID)
+	if err != nil {
+		return fmt.Errorf("couldn't fetch guild: %w", err)
+	}
+	gi := b.guildInfos[guild.ID]
+	if gi == nil {
+		return fmt.Errorf("guild didn't have threads")
+	}
+	var threads []*discordgo.Channel
+	//the thread we want to move to the head, but refreshed
+	var headThread *discordgo.Channel
+	for _, channel := range guild.Channels {
+		if channel.ParentID == gi.threadCategoryID {
+			if channel.ID == thread.ID {
+				headThread = channel
+			} else {
+				threads = append(threads, channel)
+			}
+		}
+	}
+
+	if headThread == nil {
+		return fmt.Errorf("didn't find the target thread unexpectedly")
+	}
+
+	threads = append([]*discordgo.Channel{headThread}, threads...)
+
+	for i, channel := range threads {
+		channel.Position = i
+	}
+
+	if err := b.session.GuildChannelsReorder(guild.ID, threads); err != nil {
+		return fmt.Errorf("couldn't reorder channels: %w", err)
+	}
+
+	return nil
+}
+
 func nameForGuild(guild *discordgo.Guild) string {
 	return guild.Name + " (" + guild.ID + ")"
+}
+
+func nameForThread(thread *discordgo.Channel) string {
+	return thread.Name + " (" + thread.ID + ")"
 }
