@@ -96,7 +96,16 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 		fmt.Println("Couldn't find channel")
 		return
 	}
-	fmt.Println(event.Message.Content + " posted in " + channel.Name)
+	gi := b.guildInfos[event.GuildID]
+	if gi == nil {
+		//Must be a message from a server without a Threads category
+		return
+	}
+	if channel.ParentID != gi.threadCategoryID {
+		//A message outside of Threads category
+		return
+	}
+	fmt.Println(event.Message.Content + " posted in " + channel.Name + " which is within the " + THREAD_CATEGORY_NAME + " category")
 }
 
 func (b *bot) inductGuild(guild *discordgo.Guild) {
@@ -118,7 +127,7 @@ func (b *bot) inductGuild(guild *discordgo.Guild) {
 		return
 	}
 
-	fmt.Println("Found " + THREAD_CATEGORY_NAME + "category in guild " + nameForGuild(guild))
+	fmt.Println("Found " + THREAD_CATEGORY_NAME + " category in guild " + nameForGuild(guild))
 
 	info := &guildInfo{
 		threadCategoryID: threadsCategory.ID,
