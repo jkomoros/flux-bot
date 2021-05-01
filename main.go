@@ -40,8 +40,9 @@ func main() {
 
 	// Register ready as a callback for the ready events.
 	dg.AddHandler(ready)
+	dg.AddHandler(messageCreate)
 
-	//TODO: dg.Identify.Intents definition
+	dg.Identify.Intents = discordgo.IntentsGuildMessages
 
 	// Open the websocket and begin listening.
 	err = dg.Open()
@@ -64,4 +65,13 @@ func main() {
 func ready(s *discordgo.Session, event *discordgo.Ready) {
 
 	fmt.Println("Hello, world!")
+}
+
+func messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
+	channel, err := s.Channel(event.ChannelID)
+	if err != nil {
+		fmt.Println("Couldn't find channel")
+		return
+	}
+	fmt.Println(event.Message.Content + " posted in " + channel.Name)
 }
