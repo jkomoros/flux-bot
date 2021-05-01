@@ -16,13 +16,18 @@ func init() {
 }
 
 const APP_NAME = "gale-x-bot"
+const TOKEN_ENV_NAME = "BOT_TOKEN"
 
 var token string
 
 func main() {
 
 	if token == "" {
-		fmt.Println("No token provided. Please run: " + APP_NAME + " -t <bot token>")
+		token = os.Getenv(TOKEN_ENV_NAME)
+	}
+
+	if token == "" {
+		fmt.Println("No token provided. Please run: " + APP_NAME + " -t <bot token> or set env var " + TOKEN_ENV_NAME)
 		return
 	}
 
