@@ -79,6 +79,7 @@ func newBot(s *discordgo.Session) *bot {
 	s.AddHandler(result.ready)
 	s.AddHandler(result.guildCreate)
 	s.AddHandler(result.messageCreate)
+	s.AddHandler(result.channelCreate)
 	return result
 }
 
@@ -100,6 +101,16 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 		fmt.Println("Couldn't find channel")
 		return
 	}
+	if !b.isThread(channel) {
+		return
+	}
+	if err := b.moveThreadToTopOfThreads(channel); err != nil {
+		fmt.Printf("message received in a thread but couldn't move it: %v", err)
+	}
+}
+
+func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate) {
+	channel := event.Channel
 	if !b.isThread(channel) {
 		return
 	}
