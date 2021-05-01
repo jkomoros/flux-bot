@@ -83,9 +83,11 @@ func newBot(s *discordgo.Session) *bot {
 // This function will be called (due to AddHandler above) when the bot receives
 // the "ready" event from Discord.
 func (b *bot) ready(s *discordgo.Session, event *discordgo.Ready) {
+	//GuildInfo isn't populated yet.
 	fmt.Println("Ready and waiting!")
 }
 
+//This will be called after the bot starts up for each guild it's added to
 func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 	b.inductGuild(event.Guild)
 }
