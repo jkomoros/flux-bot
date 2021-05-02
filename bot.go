@@ -13,7 +13,9 @@ type bot struct {
 }
 
 type guildInfo struct {
-	threadCategoryID string
+	b                  *bot
+	threadCategoryID   string
+	archiveCategoryIDs []string
 }
 
 func newBot(s *discordgo.Session) *bot {
@@ -100,6 +102,7 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 	}
 
 	var threadsCategory *discordgo.Channel
+	var archiveCategories []*discordgo.Channel
 
 	for _, channel := range guild.Channels {
 		if channel.Type != discordgo.ChannelTypeGuildCategory {
@@ -109,6 +112,16 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 			threadsCategory = channel
 			continue
 		}
+		if strings.Contains(channel.Name, THREAD_ARCHIVE_CATEGORY_NAME) {
+			archiveCategories = append(archiveCategories, channel)
+		}
+	}
+
+	//TODO: sort archives
+
+	var archiveIDs []string
+	for _, channel := range archiveCategories {
+		archiveIDs = append(archiveIDs, channel.ID)
 	}
 
 	if threadsCategory == nil {
@@ -123,7 +136,9 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 	}
 
 	info := &guildInfo{
-		threadCategoryID: threadsCategory.ID,
+		b:                  b,
+		threadCategoryID:   threadsCategory.ID,
+		archiveCategoryIDs: archiveIDs,
 	}
 
 	b.guildInfos[guild.ID] = info

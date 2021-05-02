@@ -20,6 +20,7 @@ const TOKEN_ENV_NAME = "BOT_TOKEN"
 
 //The name of the category this will look for that contains things this should treat as threads
 const THREAD_CATEGORY_NAME = "Threads"
+const THREAD_ARCHIVE_CATEGORY_NAME = THREAD_CATEGORY_NAME + " Archive"
 
 var token string
 
