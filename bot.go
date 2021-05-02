@@ -51,7 +51,7 @@ func (b *bot) ready(s *discordgo.Session, event *discordgo.Ready) {
 
 //This will be called after the bot starts up for each guild it's added to
 func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
-	b.rebuildCategoryMap(event.Guild.ID, true)
+	b.setGuildNeedsInfoRegeneration(event.Guild.ID)
 	guildInfos := b.getInfos(event.Guild.ID)
 	if guildInfos == nil {
 		fmt.Printf("Couldn't find guild with ID %v", event.Guild.ID)
@@ -78,7 +78,7 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 }
 
 func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate) {
-	b.rebuildCategoryMap(event.GuildID, true)
+	b.setGuildNeedsInfoRegeneration(event.GuildID)
 
 	channel := event.Channel
 	if !b.isThread(channel) {
@@ -102,10 +102,17 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate) {
 	//channelUpdate happens a LOT, e.g. every time we reorder a channel, every
 	//single channel whose index changed will get called one at a time. So don't log.
-	b.rebuildCategoryMap(event.GuildID, false)
+	b.setGuildNeedsInfoRegeneration(event.GuildID)
+}
+
+func (b *bot) setGuildNeedsInfoRegeneration(guildID string) {
+	delete(b.infos, guildID)
 }
 
 func (b *bot) getInfos(guildID string) map[string]*threadGroupInfo {
+	if b.infos[guildID] == nil {
+		b.rebuildCategoryMap(guildID, false)
+	}
 	return b.infos[guildID]
 }
 
