@@ -93,7 +93,7 @@ func (b *bot) ready(s *discordgo.Session, event *discordgo.Ready) {
 
 //This will be called after the bot starts up for each guild it's added to
 func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
-	b.rebuildCategoryMap(event.Guild.ID)
+	b.rebuildCategoryMap(event.Guild.ID, true)
 }
 
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
@@ -111,7 +111,7 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 }
 
 func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate) {
-	b.rebuildCategoryMap(event.GuildID)
+	b.rebuildCategoryMap(event.GuildID, true)
 
 	channel := event.Channel
 	if !b.isThread(channel) {
@@ -123,7 +123,9 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 }
 
 func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate) {
-	b.rebuildCategoryMap(event.GuildID)
+	//channelUpdate happens a LOT, e.g. every time we reorder a channel, every
+	//single channel whose index changed will get called one at a time. So don't log.
+	b.rebuildCategoryMap(event.GuildID, false)
 }
 
 func (b *bot) isThread(channel *discordgo.Channel) bool {
@@ -139,7 +141,11 @@ func (b *bot) isThread(channel *discordgo.Channel) bool {
 	return true
 }
 
-func (b *bot) rebuildCategoryMap(guildID string) {
+//rebuildCategoryMap should be called any time the categories in the given guild
+//may have changed, e.g. a channel was created, updated, or the guild was seen
+//for the first time. if alert is true, then it will print formatting if it
+//errors.
+func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 
 	guild, err := b.session.State.Guild(guildID)
 
@@ -161,11 +167,15 @@ func (b *bot) rebuildCategoryMap(guildID string) {
 	}
 
 	if threadsCategory == nil {
-		fmt.Println(guild.Name + " (ID " + guild.ID + ") joined but didn't have a category named " + THREAD_CATEGORY_NAME)
+		if alert {
+			fmt.Println(guild.Name + " (ID " + guild.ID + ") joined but didn't have a category named " + THREAD_CATEGORY_NAME)
+		}
 		return
 	}
 
-	fmt.Println("Found " + THREAD_CATEGORY_NAME + " category in guild " + nameForGuild(guild))
+	if alert {
+		fmt.Println("Found " + THREAD_CATEGORY_NAME + " category in guild " + nameForGuild(guild))
+	}
 
 	info := &guildInfo{
 		threadCategoryID: threadsCategory.ID,
