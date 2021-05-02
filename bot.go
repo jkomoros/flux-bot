@@ -238,6 +238,41 @@ func (b byArchiveIndex) Less(i, j int) bool {
 	return indexForThreadArchive(left) > indexForThreadArchive(right)
 }
 
+func (g *guildInfo) archiveThread(thread *discordgo.Channel) error {
+	fmt.Println("Archiving thread " + nameForThread(thread) + " to because it no longer fits")
+	var activeArchiveCategoryID = g.activeArchiveCategoryID
+	if activeArchiveCategoryID == "" {
+		//Need to create an archive category to put into
+
+		name := THREAD_ARCHIVE_CATEGORY_NAME + " " + strconv.Itoa(g.nextArchiveCategoryIndex)
+
+		//TODO: copy over permissions form main category
+		archiveCategory, err := g.b.session.GuildChannelCreate(thread.GuildID, name, discordgo.ChannelTypeGuildCategory)
+
+		if err != nil {
+			return fmt.Errorf("archiveThreadCreate failed: %w", err)
+		}
+
+		activeArchiveCategoryID = archiveCategory.ID
+	}
+
+	thread, err := g.b.session.ChannelEditComplex(thread.ID, &discordgo.ChannelEdit{
+		ParentID: activeArchiveCategoryID,
+	})
+
+	if err != nil {
+		return fmt.Errorf("couldn't move categories: %w", err)
+	}
+
+	//TODO: mark readonly
+
+	if err := g.b.moveThreadToTopOfCategory(thread); err != nil {
+		return fmt.Errorf("couldn't reorder threads after archiving: %w", err)
+	}
+
+	return nil
+}
+
 func indexForThreadArchive(channel *discordgo.Channel) int {
 	pieces := strings.Split(channel.Name, THREAD_ARCHIVE_CATEGORY_NAME)
 	if len(pieces) == 1 {
