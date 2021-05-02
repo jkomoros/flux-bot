@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -13,10 +15,13 @@ type bot struct {
 }
 
 type guildInfo struct {
-	b                  *bot
-	threadCategoryID   string
-	archiveCategoryIDs []string
+	b                       *bot
+	threadCategoryID        string
+	activeArchiveCategoryID string
+	archiveCategoryIDs      []string
 }
+
+type byArchiveIndex []*discordgo.Channel
 
 func newBot(s *discordgo.Session) *bot {
 	result := &bot{
@@ -102,7 +107,7 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 	}
 
 	var threadsCategory *discordgo.Channel
-	var archiveCategories []*discordgo.Channel
+	var archiveCategories byArchiveIndex
 
 	for _, channel := range guild.Channels {
 		if channel.Type != discordgo.ChannelTypeGuildCategory {
@@ -117,10 +122,14 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 		}
 	}
 
-	//TODO: sort archives
+	sort.Sort(archiveCategories)
 
 	var archiveIDs []string
-	for _, channel := range archiveCategories {
+	var activeArchiveCategoryID string
+	for i, channel := range archiveCategories {
+		if i == 0 {
+			activeArchiveCategoryID = channel.ID
+		}
 		archiveIDs = append(archiveIDs, channel.ID)
 	}
 
@@ -132,13 +141,14 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 	}
 
 	if alert {
-		fmt.Println("Found " + THREAD_CATEGORY_NAME + " category in guild " + nameForGuild(guild))
+		fmt.Println("Found " + THREAD_CATEGORY_NAME + " category in guild " + nameForGuild(guild) + " with " + strconv.Itoa(len(archiveIDs)) + " archive categories")
 	}
 
 	info := &guildInfo{
-		b:                  b,
-		threadCategoryID:   threadsCategory.ID,
-		archiveCategoryIDs: archiveIDs,
+		b:                       b,
+		threadCategoryID:        threadsCategory.ID,
+		activeArchiveCategoryID: activeArchiveCategoryID,
+		archiveCategoryIDs:      archiveIDs,
 	}
 
 	b.guildInfos[guild.ID] = info
@@ -185,6 +195,35 @@ func (b *bot) moveThreadToTopOfThreads(thread *discordgo.Channel) error {
 	}
 
 	return nil
+}
+
+func (b byArchiveIndex) Len() int {
+	return len(b)
+}
+
+func (b byArchiveIndex) Swap(i, j int) {
+	b[i], b[j] = b[j], b[i]
+}
+
+func (b byArchiveIndex) Less(i, j int) bool {
+	left := b[i]
+	right := b[j]
+	//Sort so the ones with the higher index come first
+	return indexForThreadArchive(left) > indexForThreadArchive(right)
+}
+
+func indexForThreadArchive(channel *discordgo.Channel) int {
+	pieces := strings.Split(channel.Name, THREAD_ARCHIVE_CATEGORY_NAME)
+	if len(pieces) == 1 {
+		return -1
+	}
+	intStr := strings.TrimSpace(pieces[1])
+	result, err := strconv.Atoi(intStr)
+	if err != nil {
+		fmt.Println("Couldn't convert string: " + intStr + ": " + err.Error())
+		return -1
+	}
+	return result
 }
 
 func nameForGuild(guild *discordgo.Guild) string {
