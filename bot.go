@@ -252,7 +252,7 @@ func (b *bot) moveThreadToTopOfCategory(thread *discordgo.Channel) error {
 	if err != nil {
 		return fmt.Errorf("couldn't fetch guild: %w", err)
 	}
-	var threads []*discordgo.Channel
+	var threads byDiscordOrder
 	//the thread we want to move to the head, but refreshed
 	var headThread *discordgo.Channel
 	for _, channel := range guild.Channels {
@@ -264,6 +264,9 @@ func (b *bot) moveThreadToTopOfCategory(thread *discordgo.Channel) error {
 			}
 		}
 	}
+
+	//The order we come across them in has nothing to do with their actual order...
+	sort.Sort(threads)
 
 	if headThread == nil {
 		return fmt.Errorf("didn't find the target thread unexpectedly")
