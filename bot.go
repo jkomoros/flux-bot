@@ -73,6 +73,14 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 	if err := b.moveThreadToTopOfThreads(channel); err != nil {
 		fmt.Printf("message received in a thread but couldn't move it: %v", err)
 	}
+	gi := b.guildInfos[event.GuildID]
+	if gi == nil {
+		fmt.Println("Couldnt get guild info to archive if necessary")
+		return
+	}
+	if err := gi.archiveThreadsIfNecessary(); err != nil {
+		fmt.Printf("Couldn't archive threads if necessary: %v", err)
+	}
 }
 
 func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate) {
@@ -263,7 +271,7 @@ func (g *guildInfo) archiveThreadsIfNecessary() error {
 	for i := 0; i < extraCount; i++ {
 		thread := threads[len(threads)-1-i]
 		if err := g.archiveThread(thread); err != nil {
-			return fmt.Errorf("Couldn't archive thread %v: %w", i, err)
+			return fmt.Errorf("couldn't archive thread %v: %w", i, err)
 		}
 	}
 
