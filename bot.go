@@ -47,6 +47,13 @@ func (b *bot) ready(s *discordgo.Session, event *discordgo.Ready) {
 //This will be called after the bot starts up for each guild it's added to
 func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 	b.rebuildCategoryMap(event.Guild.ID, true)
+	gi := b.guildInfos[event.Guild.ID]
+	if gi == nil {
+		fmt.Printf("Couldn't find guild with ID %v", event.Guild.ID)
+	}
+	if err := gi.archiveThreadsIfNecessary(); err != nil {
+		fmt.Printf("Couldn't archive extra threads on boot: %v", err)
+	}
 }
 
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
