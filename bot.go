@@ -24,6 +24,9 @@ type guildInfo struct {
 
 type byArchiveIndex []*discordgo.Channel
 
+//Sort in a similar way as the main discord client
+type byDiscordOrder []*discordgo.Channel
+
 func newBot(s *discordgo.Session) *bot {
 	result := &bot{
 		session:    s,
@@ -190,12 +193,13 @@ func (b *bot) threadsInCategory(category *discordgo.Channel) []*discordgo.Channe
 	if err != nil {
 		return nil
 	}
-	var result []*discordgo.Channel
+	var result byDiscordOrder
 	for _, channel := range guild.Channels {
 		if channel.ParentID == category.ID {
 			result = append(result, channel)
 		}
 	}
+	sort.Sort(result)
 	return result
 }
 
@@ -259,6 +263,23 @@ func (b byArchiveIndex) Less(i, j int) bool {
 	right := b[j]
 	//Sort so the ones with the higher index come first
 	return indexForThreadArchive(left) > indexForThreadArchive(right)
+}
+
+func (b byDiscordOrder) Len() int {
+	return len(b)
+}
+
+func (b byDiscordOrder) Swap(i, j int) {
+	b[i], b[j] = b[j], b[i]
+}
+
+func (b byDiscordOrder) Less(i, j int) bool {
+	left := b[i]
+	right := b[j]
+	//Notionally this should be similar logic to https://github.com/Rapptz/discord.py/issues/2392#issuecomment-707455919
+	//For now simply sorting by position index is fine
+
+	return left.Position < right.Position
 }
 
 func (g *guildInfo) archiveThreadsIfNecessary() error {
