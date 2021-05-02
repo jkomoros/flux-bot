@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -12,7 +13,8 @@ import (
 type bot struct {
 	session *discordgo.Session
 	//guildID -> threadCategoryChannelID -> info
-	infos map[string]map[string]*threadGroupInfo
+	infos     map[string]map[string]*threadGroupInfo
+	infoMutex sync.RWMutex
 }
 
 type threadGroupInfo struct {
@@ -106,14 +108,22 @@ func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate
 }
 
 func (b *bot) setGuildNeedsInfoRegeneration(guildID string) {
+	b.infoMutex.Lock()
 	delete(b.infos, guildID)
+	b.infoMutex.Unlock()
 }
 
 func (b *bot) getInfos(guildID string) map[string]*threadGroupInfo {
-	if b.infos[guildID] == nil {
+	b.infoMutex.RLock()
+	currentInfos := b.infos[guildID]
+	b.infoMutex.RUnlock()
+	if currentInfos == nil {
 		b.rebuildCategoryMap(guildID, false)
 	}
-	return b.infos[guildID]
+	b.infoMutex.RLock()
+	currentInfos = b.infos[guildID]
+	b.infoMutex.RUnlock()
+	return currentInfos
 }
 
 func (b *bot) isThread(channel *discordgo.Channel) bool {
@@ -179,7 +189,7 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 
 	}
 
-	b.infos[guild.ID] = make(map[string]*threadGroupInfo)
+	infos := make(map[string]*threadGroupInfo)
 
 	for name, category := range categories {
 
@@ -217,7 +227,7 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 			nextArchiveCategoryIndex: nextArchiveCategoryIndex,
 		}
 
-		b.infos[guild.ID][category.threadGroup.ID] = info
+		infos[category.threadGroup.ID] = info
 	}
 
 	if len(categories) == 0 {
@@ -225,6 +235,9 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 			fmt.Println(guild.Name + " (ID " + guild.ID + ") joined but didn't have a category named " + THREAD_CATEGORY_NAME)
 		}
 	}
+	b.infoMutex.Lock()
+	b.infos[guild.ID] = infos
+	b.infoMutex.Unlock()
 
 }
 
