@@ -312,10 +312,36 @@ func (g *guildInfo) archiveThread(thread *discordgo.Channel) error {
 	if activeArchiveCategoryID == "" {
 		//Need to create an archive category to put into
 
+		guild, err := g.b.session.State.Guild(thread.GuildID)
+		if err != nil {
+			return fmt.Errorf("couldn't get guild: %w", err)
+		}
+
+		var everyoneRoleID string
+		for _, role := range guild.Roles {
+			if strings.Contains(role.Name, EVERYONE_ROLE_NAME) {
+				everyoneRoleID = role.ID
+			}
+		}
+
+		if everyoneRoleID == "" {
+			return fmt.Errorf("couldn't find role @everyone")
+		}
+
 		name := THREAD_ARCHIVE_CATEGORY_NAME + " " + strconv.Itoa(g.nextArchiveCategoryIndex)
 
-		//TODO: copy over permissions form main category
-		archiveCategory, err := g.b.session.GuildChannelCreate(thread.GuildID, name, discordgo.ChannelTypeGuildCategory)
+		//TODO: copy over permissions from main category
+		archiveCategory, err := g.b.session.GuildChannelCreateComplex(thread.GuildID, discordgo.GuildChannelCreateData{
+			Name: name,
+			Type: discordgo.ChannelTypeGuildCategory,
+			PermissionOverwrites: []*discordgo.PermissionOverwrite{
+				{
+					ID:   everyoneRoleID,
+					Type: discordgo.PermissionOverwriteTypeRole,
+					Deny: discordgo.PermissionSendMessages,
+				},
+			},
+		})
 
 		if err != nil {
 			return fmt.Errorf("archiveThreadCreate failed: %w", err)

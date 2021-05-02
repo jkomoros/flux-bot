@@ -28,6 +28,7 @@ const MAX_ACTIVE_THREADS = 5
 
 //The max number of channels that Discord allows to be in a category channel. This is configured by discord.
 const MAX_CATEGORY_CHANNELS = 50
+const EVERYONE_ROLE_NAME = "@everyone"
 
 var token string
 
