@@ -10,8 +10,8 @@ import (
 )
 
 type bot struct {
-	session    *discordgo.Session
-	guildInfos map[string]*guildInfo
+	session *discordgo.Session
+	infos   map[string]*guildInfo
 }
 
 type guildInfo struct {
@@ -29,8 +29,8 @@ type byDiscordOrder []*discordgo.Channel
 
 func newBot(s *discordgo.Session) *bot {
 	result := &bot{
-		session:    s,
-		guildInfos: make(map[string]*guildInfo),
+		session: s,
+		infos:   make(map[string]*guildInfo),
 	}
 	s.AddHandler(result.ready)
 	s.AddHandler(result.guildCreate)
@@ -50,7 +50,7 @@ func (b *bot) ready(s *discordgo.Session, event *discordgo.Ready) {
 //This will be called after the bot starts up for each guild it's added to
 func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 	b.rebuildCategoryMap(event.Guild.ID, true)
-	gi := b.guildInfos[event.Guild.ID]
+	gi := b.getInfo(event.Guild.ID)
 	if gi == nil {
 		fmt.Printf("Couldn't find guild with ID %v", event.Guild.ID)
 	}
@@ -83,7 +83,7 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 	if err := b.moveThreadToTopOfThreads(channel); err != nil {
 		fmt.Printf("message received in a thread but couldn't move it: %v", err)
 	}
-	gi := b.guildInfos[event.GuildID]
+	gi := b.getInfo(event.GuildID)
 	if gi == nil {
 		fmt.Println("Couldnt get guild info to archive if necessary")
 		return
@@ -99,8 +99,12 @@ func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate
 	b.rebuildCategoryMap(event.GuildID, false)
 }
 
+func (b *bot) getInfo(guildID string) *guildInfo {
+	return b.infos[guildID]
+}
+
 func (b *bot) isThread(channel *discordgo.Channel) bool {
-	gi := b.guildInfos[channel.GuildID]
+	gi := b.getInfo(channel.GuildID)
 	if gi == nil {
 		//Must be a message from a server without a Threads category
 		return false
@@ -176,7 +180,7 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 		nextArchiveCategoryIndex: nextArchiveCategoryIndex,
 	}
 
-	b.guildInfos[guild.ID] = info
+	b.infos[guild.ID] = info
 
 }
 
