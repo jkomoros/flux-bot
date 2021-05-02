@@ -330,12 +330,12 @@ func (g *threadGroupInfo) archiveThreadsIfNecessary() error {
 	}
 	threads := g.b.threadsInCategory(category)
 
-	if len(threads) <= MAX_ACTIVE_THREADS {
+	if len(threads) <= maxActiveThreads {
 		//Not necessary to remove any
 		return nil
 	}
 
-	extraCount := len(threads) - MAX_ACTIVE_THREADS
+	extraCount := len(threads) - maxActiveThreads
 
 	for i := 0; i < extraCount; i++ {
 		thread := threads[len(threads)-1-i]
