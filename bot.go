@@ -15,10 +15,11 @@ type bot struct {
 }
 
 type guildInfo struct {
-	b                       *bot
-	threadCategoryID        string
-	activeArchiveCategoryID string
-	archiveCategoryIDs      []string
+	b                        *bot
+	threadCategoryID         string
+	nextArchiveCategoryIndex int
+	activeArchiveCategoryID  string
+	archiveCategoryIDs       []string
 }
 
 type byArchiveIndex []*discordgo.Channel
@@ -126,10 +127,14 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 
 	var archiveIDs []string
 	var activeArchiveCategoryID string
+	var nextArchiveCategoryIndex int
 	for i, channel := range archiveCategories {
-		//It can only be active if there's at least one thread slot
-		if i == 0 && b.numThreadsInCategory(channel) < MAX_CATEGORY_CHANNELS {
-			activeArchiveCategoryID = channel.ID
+		if i == 0 {
+			nextArchiveCategoryIndex = indexForThreadArchive(channel) + 1
+			//It can only be active if there's at least one thread slot
+			if b.numThreadsInCategory(channel) < MAX_CATEGORY_CHANNELS {
+				activeArchiveCategoryID = channel.ID
+			}
 		}
 		archiveIDs = append(archiveIDs, channel.ID)
 	}
@@ -146,10 +151,11 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 	}
 
 	info := &guildInfo{
-		b:                       b,
-		threadCategoryID:        threadsCategory.ID,
-		activeArchiveCategoryID: activeArchiveCategoryID,
-		archiveCategoryIDs:      archiveIDs,
+		b:                        b,
+		threadCategoryID:         threadsCategory.ID,
+		activeArchiveCategoryID:  activeArchiveCategoryID,
+		archiveCategoryIDs:       archiveIDs,
+		nextArchiveCategoryIndex: nextArchiveCategoryIndex,
 	}
 
 	b.guildInfos[guild.ID] = info
