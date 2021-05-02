@@ -11,11 +11,13 @@ import (
 
 type bot struct {
 	session *discordgo.Session
-	infos   map[string]*guildInfo
+	//guildID -> threadCategoryChannelID -> info
+	infos map[string]map[string]*threadGroupInfo
 }
 
-type guildInfo struct {
+type threadGroupInfo struct {
 	b                        *bot
+	name                     string
 	threadCategoryID         string
 	nextArchiveCategoryIndex int
 	activeArchiveCategoryID  string
@@ -30,7 +32,7 @@ type byDiscordOrder []*discordgo.Channel
 func newBot(s *discordgo.Session) *bot {
 	result := &bot{
 		session: s,
-		infos:   make(map[string]*guildInfo),
+		infos:   make(map[string]map[string]*threadGroupInfo),
 	}
 	s.AddHandler(result.ready)
 	s.AddHandler(result.guildCreate)
@@ -50,12 +52,14 @@ func (b *bot) ready(s *discordgo.Session, event *discordgo.Ready) {
 //This will be called after the bot starts up for each guild it's added to
 func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 	b.rebuildCategoryMap(event.Guild.ID, true)
-	gi := b.getInfo(event.Guild.ID)
-	if gi == nil {
+	guildInfos := b.getInfos(event.Guild.ID)
+	if guildInfos == nil {
 		fmt.Printf("Couldn't find guild with ID %v", event.Guild.ID)
 	}
-	if err := gi.archiveThreadsIfNecessary(); err != nil {
-		fmt.Printf("Couldn't archive extra threads on boot: %v", err)
+	for _, group := range guildInfos {
+		if err := group.archiveThreadsIfNecessary(); err != nil {
+			fmt.Printf("Couldn't archive extra threads on boot: %v", err)
+		}
 	}
 }
 
@@ -83,13 +87,15 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 	if err := b.moveThreadToTopOfThreads(channel); err != nil {
 		fmt.Printf("message received in a thread but couldn't move it: %v", err)
 	}
-	gi := b.getInfo(event.GuildID)
-	if gi == nil {
+	guildInfos := b.getInfos(event.GuildID)
+	if guildInfos == nil {
 		fmt.Println("Couldnt get guild info to archive if necessary")
 		return
 	}
-	if err := gi.archiveThreadsIfNecessary(); err != nil {
-		fmt.Printf("Couldn't archive threads if necessary: %v", err)
+	for _, group := range guildInfos {
+		if err := group.archiveThreadsIfNecessary(); err != nil {
+			fmt.Printf("Couldn't archive threads if necessary: %v", err)
+		}
 	}
 }
 
@@ -99,21 +105,29 @@ func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate
 	b.rebuildCategoryMap(event.GuildID, false)
 }
 
-func (b *bot) getInfo(guildID string) *guildInfo {
+func (b *bot) getInfos(guildID string) map[string]*threadGroupInfo {
 	return b.infos[guildID]
 }
 
 func (b *bot) isThread(channel *discordgo.Channel) bool {
-	gi := b.getInfo(channel.GuildID)
-	if gi == nil {
+	guildInfos := b.getInfos(channel.GuildID)
+	if guildInfos == nil {
 		//Must be a message from a server without a Threads category
 		return false
 	}
-	if channel.ParentID != gi.threadCategoryID {
-		//A message outside of Threads category
-		return false
+	for _, group := range guildInfos {
+		if channel.ParentID == group.threadCategoryID {
+			//A message outside of Threads category
+			return true
+		}
 	}
-	return true
+	//Didn't match any of the infos
+	return false
+}
+
+type categoryStruct struct {
+	threadGroup       *discordgo.Channel
+	archiveCategories byArchiveIndex
 }
 
 //rebuildCategoryMap should be called any time the categories in the given guild
@@ -129,58 +143,81 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 		return
 	}
 
-	var threadsCategory *discordgo.Channel
-	var archiveCategories byArchiveIndex
+	categories := make(map[string]*categoryStruct)
 
 	for _, channel := range guild.Channels {
 		if channel.Type != discordgo.ChannelTypeGuildCategory {
 			continue
 		}
-		if strings.HasSuffix(channel.Name, THREAD_CATEGORY_NAME) {
-			threadsCategory = channel
+		//THREAD_ARCHIVE_CATEGORY_NAME is a superset of THREAD_CATEGORY_NAME so check for that first
+		if strings.Contains(channel.Name, THREAD_ARCHIVE_CATEGORY_NAME) {
+			name := strings.TrimSpace(strings.Split(channel.Name, THREAD_ARCHIVE_CATEGORY_NAME)[0])
+			category := categories[name]
+			if category == nil {
+				category = &categoryStruct{}
+				categories[name] = category
+			}
+			category.archiveCategories = append(category.archiveCategories, channel)
 			continue
 		}
-		if strings.Contains(channel.Name, THREAD_ARCHIVE_CATEGORY_NAME) {
-			archiveCategories = append(archiveCategories, channel)
-		}
-	}
-
-	sort.Sort(archiveCategories)
-
-	var archiveIDs []string
-	var activeArchiveCategoryID string
-	var nextArchiveCategoryIndex int
-	for i, channel := range archiveCategories {
-		if i == 0 {
-			nextArchiveCategoryIndex = indexForThreadArchive(channel) + 1
-			//It can only be active if there's at least one thread slot
-			if b.numThreadsInCategory(channel) < MAX_CATEGORY_CHANNELS {
-				activeArchiveCategoryID = channel.ID
+		if strings.Contains(channel.Name, THREAD_CATEGORY_NAME) {
+			name := strings.TrimSpace(strings.Split(channel.Name, THREAD_CATEGORY_NAME)[0])
+			category := categories[name]
+			if category == nil {
+				category = &categoryStruct{}
+				categories[name] = category
 			}
+			category.threadGroup = channel
 		}
-		archiveIDs = append(archiveIDs, channel.ID)
+
 	}
 
-	if threadsCategory == nil {
+	b.infos[guild.ID] = make(map[string]*threadGroupInfo)
+
+	for name, category := range categories {
+
+		sort.Sort(category.archiveCategories)
+
+		var archiveIDs []string
+		var activeArchiveCategoryID string
+		var nextArchiveCategoryIndex int
+		for i, channel := range category.archiveCategories {
+			if i == 0 {
+				nextArchiveCategoryIndex = indexForThreadArchive(channel) + 1
+				//It can only be active if there's at least one thread slot
+				if b.numThreadsInCategory(channel) < MAX_CATEGORY_CHANNELS {
+					activeArchiveCategoryID = channel.ID
+				}
+			}
+			archiveIDs = append(archiveIDs, channel.ID)
+		}
+
+		printName := name
+		if printName == "" {
+			printName = "''"
+		}
+
+		if alert {
+			fmt.Println("Found " + THREAD_CATEGORY_NAME + " category named " + printName + " in guild " + nameForGuild(guild) + " with " + strconv.Itoa(len(archiveIDs)) + " archive categories")
+		}
+
+		info := &threadGroupInfo{
+			b:                        b,
+			name:                     name,
+			threadCategoryID:         category.threadGroup.ID,
+			activeArchiveCategoryID:  activeArchiveCategoryID,
+			archiveCategoryIDs:       archiveIDs,
+			nextArchiveCategoryIndex: nextArchiveCategoryIndex,
+		}
+
+		b.infos[guild.ID][category.threadGroup.ID] = info
+	}
+
+	if len(categories) == 0 {
 		if alert {
 			fmt.Println(guild.Name + " (ID " + guild.ID + ") joined but didn't have a category named " + THREAD_CATEGORY_NAME)
 		}
-		return
 	}
-
-	if alert {
-		fmt.Println("Found " + THREAD_CATEGORY_NAME + " category in guild " + nameForGuild(guild) + " with " + strconv.Itoa(len(archiveIDs)) + " archive categories")
-	}
-
-	info := &guildInfo{
-		b:                        b,
-		threadCategoryID:         threadsCategory.ID,
-		activeArchiveCategoryID:  activeArchiveCategoryID,
-		archiveCategoryIDs:       archiveIDs,
-		nextArchiveCategoryIndex: nextArchiveCategoryIndex,
-	}
-
-	b.infos[guild.ID] = info
 
 }
 
@@ -286,7 +323,7 @@ func (b byDiscordOrder) Less(i, j int) bool {
 	return left.Position < right.Position
 }
 
-func (g *guildInfo) archiveThreadsIfNecessary() error {
+func (g *threadGroupInfo) archiveThreadsIfNecessary() error {
 	category, err := g.b.session.State.Channel(g.threadCategoryID)
 	if err != nil {
 		return fmt.Errorf("archiveThreadsIfNecessary couldn't find category: %w", err)
@@ -310,7 +347,7 @@ func (g *guildInfo) archiveThreadsIfNecessary() error {
 	return nil
 }
 
-func (g *guildInfo) archiveThread(thread *discordgo.Channel) error {
+func (g *threadGroupInfo) archiveThread(thread *discordgo.Channel) error {
 	fmt.Println("Archiving thread " + nameForThread(thread) + " to because it no longer fits")
 	var activeArchiveCategoryID = g.activeArchiveCategoryID
 	if activeArchiveCategoryID == "" {
@@ -332,7 +369,12 @@ func (g *guildInfo) archiveThread(thread *discordgo.Channel) error {
 			return fmt.Errorf("couldn't find role @everyone")
 		}
 
-		name := THREAD_ARCHIVE_CATEGORY_NAME + " " + strconv.Itoa(g.nextArchiveCategoryIndex)
+		var name string
+		if g.name != "" {
+			name = g.name + " "
+		}
+
+		name += THREAD_ARCHIVE_CATEGORY_NAME + " " + strconv.Itoa(g.nextArchiveCategoryIndex)
 
 		//TODO: copy over permissions from main category
 		archiveCategory, err := g.b.session.GuildChannelCreateComplex(thread.GuildID, discordgo.GuildChannelCreateData{
@@ -371,8 +413,6 @@ func (g *guildInfo) archiveThread(thread *discordgo.Channel) error {
 	if err != nil {
 		return fmt.Errorf("couldn't move categories: %w", err)
 	}
-
-	//TODO: mark readonly
 
 	//TODO: we really should make sure the thread is at the top of the archive.
 	//But b.moveThreadToTopOfCategory won't work naively because at this point
