@@ -246,6 +246,30 @@ func (b byArchiveIndex) Less(i, j int) bool {
 	return indexForThreadArchive(left) > indexForThreadArchive(right)
 }
 
+func (g *guildInfo) archiveThreadsIfNecessary() error {
+	category, err := g.b.session.State.Channel(g.threadCategoryID)
+	if err != nil {
+		return fmt.Errorf("archiveThreadsIfNecessary couldn't find category: %w", err)
+	}
+	threads := g.b.threadsInCategory(category)
+
+	if len(threads) <= MAX_ACTIVE_THREADS {
+		//Not necessary to remove any
+		return nil
+	}
+
+	extraCount := len(threads) - MAX_ACTIVE_THREADS
+
+	for i := 0; i < extraCount; i++ {
+		thread := threads[len(threads)-1-i]
+		if err := g.archiveThread(thread); err != nil {
+			return fmt.Errorf("Couldn't archive thread %v: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
 func (g *guildInfo) archiveThread(thread *discordgo.Channel) error {
 	fmt.Println("Archiving thread " + nameForThread(thread) + " to because it no longer fits")
 	var activeArchiveCategoryID = g.activeArchiveCategoryID
