@@ -7,6 +7,8 @@ You can get the token by visiting https://discord.com/developers/applications/83
 
 You can then either set the token as an environment variable (`export BOT_TOKEN=<TOKEN>`) or pass it via the `-t` parameter.
 
+Run the app by doing `go build && ./gale-x-bot`
+
 ## Adding a bot to a server
 
 Have a user logged into a server visit this link:
