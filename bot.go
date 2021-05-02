@@ -127,7 +127,8 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 	var archiveIDs []string
 	var activeArchiveCategoryID string
 	for i, channel := range archiveCategories {
-		if i == 0 {
+		//It can only be active if there's at least one thread slot
+		if i == 0 && b.numThreadsInCategory(channel) < MAX_CATEGORY_CHANNELS {
 			activeArchiveCategoryID = channel.ID
 		}
 		archiveIDs = append(archiveIDs, channel.ID)
@@ -153,6 +154,20 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 
 	b.guildInfos[guild.ID] = info
 
+}
+
+func (b *bot) numThreadsInCategory(category *discordgo.Channel) int {
+	guild, err := b.session.State.Guild(category.GuildID)
+	if err != nil {
+		return -1
+	}
+	var count int
+	for _, channel := range guild.Channels {
+		if channel.ParentID == category.ID {
+			count++
+		}
+	}
+	return count
 }
 
 func (b *bot) moveThreadToTopOfThreads(thread *discordgo.Channel) error {

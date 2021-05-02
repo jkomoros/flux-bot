@@ -22,6 +22,13 @@ const TOKEN_ENV_NAME = "BOT_TOKEN"
 const THREAD_CATEGORY_NAME = "Threads"
 const THREAD_ARCHIVE_CATEGORY_NAME = THREAD_CATEGORY_NAME + " Archive"
 
+//Number of threads to allow in an active category before bumping old ones.
+//Should be at least one smaller than MAX_CATEGORY_CHANNELS.
+const MAX_ACTIVE_THREADS = 5
+
+//The max number of channels that Discord allows to be in a category channel. This is configured by discord.
+const MAX_CATEGORY_CHANNELS = 50
+
 var token string
 
 func main() {
