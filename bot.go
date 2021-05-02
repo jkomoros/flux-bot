@@ -163,17 +163,25 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 }
 
 func (b *bot) numThreadsInCategory(category *discordgo.Channel) int {
-	guild, err := b.session.State.Guild(category.GuildID)
-	if err != nil {
+	threads := b.threadsInCategory(category)
+	if threads == nil {
 		return -1
 	}
-	var count int
+	return len(threads)
+}
+
+func (b *bot) threadsInCategory(category *discordgo.Channel) []*discordgo.Channel {
+	guild, err := b.session.State.Guild(category.GuildID)
+	if err != nil {
+		return nil
+	}
+	var result []*discordgo.Channel
 	for _, channel := range guild.Channels {
 		if channel.ParentID == category.ID {
-			count++
+			result = append(result, channel)
 		}
 	}
-	return count
+	return result
 }
 
 //Moves this thread to position 0, sliding everything else down, but maintaining
