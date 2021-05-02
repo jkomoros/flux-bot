@@ -92,7 +92,7 @@ func (b *bot) ready(s *discordgo.Session, event *discordgo.Ready) {
 
 //This will be called after the bot starts up for each guild it's added to
 func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
-	b.inductGuild(event.Guild)
+	b.rebuildCategoryMap(event.Guild.ID)
 }
 
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
@@ -132,7 +132,14 @@ func (b *bot) isThread(channel *discordgo.Channel) bool {
 	return true
 }
 
-func (b *bot) inductGuild(guild *discordgo.Guild) {
+func (b *bot) rebuildCategoryMap(guildID string) {
+
+	guild, err := b.session.State.Guild(guildID)
+
+	if err != nil {
+		fmt.Println("Couldn't get guild " + guildID)
+		return
+	}
 
 	var threadsCategory *discordgo.Channel
 
