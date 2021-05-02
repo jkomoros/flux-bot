@@ -96,7 +96,7 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 }
 
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
-	channel, err := s.Channel(event.ChannelID)
+	channel, err := s.State.Channel(event.ChannelID)
 	if err != nil {
 		fmt.Println("Couldn't find channel")
 		return
