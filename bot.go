@@ -176,23 +176,19 @@ func (b *bot) numThreadsInCategory(category *discordgo.Channel) int {
 	return count
 }
 
-func (b *bot) moveThreadToTopOfThreads(thread *discordgo.Channel) error {
-
-	fmt.Println("Popping thread " + nameForThread(thread) + " to top because it received a new message")
+//Moves this thread to position 0, sliding everything else down, but maintaining
+//their order.
+func (b *bot) moveThreadToTopOfCategory(thread *discordgo.Channel) error {
 
 	guild, err := b.session.State.Guild(thread.GuildID)
 	if err != nil {
 		return fmt.Errorf("couldn't fetch guild: %w", err)
 	}
-	gi := b.guildInfos[guild.ID]
-	if gi == nil {
-		return fmt.Errorf("guild didn't have threads")
-	}
 	var threads []*discordgo.Channel
 	//the thread we want to move to the head, but refreshed
 	var headThread *discordgo.Channel
 	for _, channel := range guild.Channels {
-		if channel.ParentID == gi.threadCategoryID {
+		if channel.ParentID == thread.ParentID {
 			if channel.ID == thread.ID {
 				headThread = channel
 			} else {
@@ -216,6 +212,15 @@ func (b *bot) moveThreadToTopOfThreads(thread *discordgo.Channel) error {
 	}
 
 	return nil
+}
+
+func (b *bot) moveThreadToTopOfThreads(thread *discordgo.Channel) error {
+
+	fmt.Println("Popping thread " + nameForThread(thread) + " to top because it received a new message")
+
+	//TODO: conceptually we should move this to the given category if it's not in it yet.
+	return b.moveThreadToTopOfCategory(thread)
+
 }
 
 func (b byArchiveIndex) Len() int {
