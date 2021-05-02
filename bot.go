@@ -303,7 +303,10 @@ func (g *guildInfo) archiveThread(thread *discordgo.Channel) error {
 		activeArchiveCategoryID = archiveCategory.ID
 	}
 
-	thread, err := g.b.session.ChannelEditComplex(thread.ID, &discordgo.ChannelEdit{
+	_, err := g.b.session.ChannelEditComplex(thread.ID, &discordgo.ChannelEdit{
+		//This is a generally reasonable default, especially because by default
+		//there will very often only be one.
+		Position: 0,
 		ParentID: activeArchiveCategoryID,
 	})
 
@@ -313,9 +316,10 @@ func (g *guildInfo) archiveThread(thread *discordgo.Channel) error {
 
 	//TODO: mark readonly
 
-	if err := g.b.moveThreadToTopOfCategory(thread); err != nil {
-		return fmt.Errorf("couldn't reorder threads after archiving: %w", err)
-	}
+	//TODO: we really should make sure the thread is at the top of the archive.
+	//But b.moveThreadToTopOfCategory won't work naively because at this point
+	//we haven't yet received the channelUpdate message (I think). Currently the
+	//behavior works OK if only one thread is being archived.
 
 	return nil
 }
