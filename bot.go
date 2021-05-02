@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -104,7 +105,7 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 		if channel.Type != discordgo.ChannelTypeGuildCategory {
 			continue
 		}
-		if channel.Name == THREAD_CATEGORY_NAME {
+		if strings.HasSuffix(channel.Name, THREAD_CATEGORY_NAME) {
 			threadsCategory = channel
 			continue
 		}
