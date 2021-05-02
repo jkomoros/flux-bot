@@ -350,11 +350,18 @@ func (g *guildInfo) archiveThread(thread *discordgo.Channel) error {
 		activeArchiveCategoryID = archiveCategory.ID
 	}
 
-	_, err := g.b.session.ChannelEditComplex(thread.ID, &discordgo.ChannelEdit{
+	archiveCategory, err := g.b.session.State.Channel(activeArchiveCategoryID)
+	if err != nil {
+		return fmt.Errorf("couldn't fetch archiveCategory: %w", err)
+	}
+
+	_, err = g.b.session.ChannelEditComplex(thread.ID, &discordgo.ChannelEdit{
 		//This is a generally reasonable default, especially because by default
 		//there will very often only be one.
 		Position: 0,
 		ParentID: activeArchiveCategoryID,
+		//Set the same permission overwrites so it will be synced
+		PermissionOverwrites: archiveCategory.PermissionOverwrites,
 	})
 
 	if err != nil {
