@@ -358,6 +358,11 @@ func (g *threadGroupInfo) archiveThread(thread *discordgo.Channel) error {
 			return fmt.Errorf("couldn't get guild: %w", err)
 		}
 
+		mainCategory, err := g.b.session.State.Channel(g.threadCategoryID)
+		if err != nil {
+			return fmt.Errorf("couldn't get main category: %w", err)
+		}
+
 		var everyoneRoleID string
 		for _, role := range guild.Roles {
 			if strings.Contains(role.Name, EVERYONE_ROLE_NAME) {
@@ -376,17 +381,20 @@ func (g *threadGroupInfo) archiveThread(thread *discordgo.Channel) error {
 
 		name += THREAD_ARCHIVE_CATEGORY_NAME + " " + strconv.Itoa(g.nextArchiveCategoryIndex)
 
-		//TODO: copy over permissions from main category
-		archiveCategory, err := g.b.session.GuildChannelCreateComplex(thread.GuildID, discordgo.GuildChannelCreateData{
-			Name: name,
-			Type: discordgo.ChannelTypeGuildCategory,
-			PermissionOverwrites: []*discordgo.PermissionOverwrite{
-				{
-					ID:   everyoneRoleID,
-					Type: discordgo.PermissionOverwriteTypeRole,
-					Deny: discordgo.PermissionSendMessages,
-				},
+		extendedPermissions := []*discordgo.PermissionOverwrite{
+			{
+				ID:   everyoneRoleID,
+				Type: discordgo.PermissionOverwriteTypeRole,
+				Deny: discordgo.PermissionSendMessages,
 			},
+		}
+		//Copy over the main categorie's permissions
+		extendedPermissions = append(extendedPermissions, mainCategory.PermissionOverwrites...)
+
+		archiveCategory, err := g.b.session.GuildChannelCreateComplex(thread.GuildID, discordgo.GuildChannelCreateData{
+			Name:                 name,
+			Type:                 discordgo.ChannelTypeGuildCategory,
+			PermissionOverwrites: extendedPermissions,
 		})
 
 		if err != nil {
