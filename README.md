@@ -15,6 +15,8 @@ When a bot has a live session to a Discord server, it will show up in the Member
 
 A bot connects to a server with a particular secret token specific to that bot ID. Only one instance of a given bot may connect to a server at a time.
 
+You can read about the discordgo API at https://pkg.go.dev/github.com/bwmarrin/discordgo. You can read about the discord API at https://discord.com/developers/docs/resources/channel
+
 ## Setting up your own dev bot
 
 When hacking on the bot, it's good to have your own dev version of the bot and a dev discord server that's just yours. That way your bot and state won't interact with others.
