@@ -21,37 +21,40 @@ You can read about the discordgo API at https://pkg.go.dev/github.com/bwmarrin/d
 
 When hacking on the bot, it's good to have your own dev version of the bot and a dev discord server that's just yours. That way your bot and state won't interact with others.
 
-First, create a discord server.
+To create a bot:
 
-Then, create your own application by going to https://discord.com/developers/applications and creating a new Application. Name it something like "GALEx dev bot".
+1. Create a discord server.
 
-Then, go to the Bot tab and hit add bot. You can give it whatever name you want. UNCHECK the 'Public bot' field and save.
+2. Create your own application by going to https://discord.com/developers/applications and creating a new Application. Name it something like "GALEx dev bot".
+
+3. Go to the Bot tab and hit add bot. You can give it whatever name you want. UNCHECK the 'Public bot' field and save.
 
 You now must give your dev bot permission to join your dev Discord server.
 
-Copy your application ID (in the URL of the page you're looking at, something like https://discord.com/developers/applications/837831972830576679/information and use that.)
+1. Copy your application ID. You can find it in the URL of the page you're looking at, something like `https://discord.com/developers/applications/837831972830576679/information` and use that.
 
-Then, visit this URL (replacing the YOUR_APP_ID_HERE) with that app ID:
-
-https://discord.com/api/oauth2/authorize?client_id=YOUR_APP_ID_HERE&scope=bot&permissions=268438544
+2. visit this URL (replacing the YOUR_APP_ID_HERE) with that app ID:
+`https://discord.com/api/oauth2/authorize?client_id=YOUR_APP_ID_HERE&scope=bot&permissions=268438544`
 
 Note that as this bot is developed, you might need to redo this connection if more permissions are ever required.
 
 Now you need to get the secret token that allows you to authenticate as your bot.
 
-Go to the Bot tab if you aren't already there and under the Token heading, click copy.
+1. Go to the Bot tab if you aren't already there and under the Token heading, click `Copy`.
 
-Open up a terminal window, and run `export BOT_TOKEN=<PASTED-TOKEN>`. (You can also pass the token on each invocation of the command by using the `-t` parameter).
+1. Open up a terminal window, and run `export BOT_TOKEN=<PASTED-TOKEN>`. (You can also pass the token on each invocation of the command by using the `-t` parameter).
 
-Run the app by doing `go build && ./gale-x-bot` . It will connect to your dev server and print out debug information.
+3. Run the app by doing `go build && ./gale-x-bot` . It will connect to your dev server and print out debug information.
 
 ## Updating the production bot
 
 The production bot is running in a `tmux` session on a Google Cloud VM running Ubuntu.
 
-Connect via SSH to the server. Run `go install -u github.com/jkomoros/gale-x-bot`
+1. Connect via SSH to the server. Run `go install -u github.com/jkomoros/gale-x-bot`
 
-Open up the tmux session via `tmux attach`. Kill the running one and then run the new one from the command history. Hit `Ctrl-b d` to disconnect from the tmux session and leave it running.
+2. Open up the tmux session via `tmux attach`. 
+3. Kill the running one and then run the new one from the command history. 
+4. Hit `Ctrl-b d` to disconnect from the tmux session and leave it running.
 
 ## Permissions
 
