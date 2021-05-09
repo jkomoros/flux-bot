@@ -44,14 +44,13 @@ func newBot(s *discordgo.Session) *bot {
 	return result
 }
 
-// This function will be called (due to AddHandler above) when the bot receives
-// the "ready" event from Discord.
+// discordgo callback: called when the bot receives the "ready" event from Discord.
 func (b *bot) ready(s *discordgo.Session, event *discordgo.Ready) {
 	//GuildInfo isn't populated yet.
 	fmt.Println("Ready and waiting!")
 }
 
-//This will be called after the bot starts up for each guild it's added to
+// discordgo callback: called after the bot starts up for each guild it's added to
 func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 	b.setGuildNeedsInfoRegeneration(event.Guild.ID)
 	guildInfos := b.getInfos(event.Guild.ID)
@@ -65,6 +64,7 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 	}
 }
 
+// discordgo callback: called after the when new message is posted.
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
 	channel, err := s.State.Channel(event.ChannelID)
 	if err != nil {
@@ -79,6 +79,7 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 	}
 }
 
+// discordgo callback: called after new channel is created.
 func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate) {
 	b.setGuildNeedsInfoRegeneration(event.GuildID)
 
@@ -101,9 +102,9 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 	}
 }
 
+// discordgo callback: channelUpdate happens a LOT, e.g. every time we reorder a channel, every
+// single channel whose index changed will get called one at a time.
 func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate) {
-	//channelUpdate happens a LOT, e.g. every time we reorder a channel, every
-	//single channel whose index changed will get called one at a time. So don't log.
 	b.setGuildNeedsInfoRegeneration(event.GuildID)
 }
 
@@ -147,10 +148,10 @@ type categoryStruct struct {
 	archiveCategories byArchiveIndex
 }
 
-//rebuildCategoryMap should be called any time the categories in the given guild
-//may have changed, e.g. a channel was created, updated, or the guild was seen
-//for the first time. if alert is true, then it will print formatting if it
-//errors.
+// rebuildCategoryMap should be called any time the categories in the given guild
+// may have changed, e.g. a channel was created, updated, or the guild was seen
+// for the first time. if alert is true, then it will print formatting if it
+// errors.
 func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 
 	guild, err := b.session.State.Guild(guildID)
@@ -166,7 +167,7 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 		if channel.Type != discordgo.ChannelTypeGuildCategory {
 			continue
 		}
-		//THREAD_ARCHIVE_CATEGORY_NAME is a superset of THREAD_CATEGORY_NAME so check for that first
+		// THREAD_ARCHIVE_CATEGORY_NAME is a superset of THREAD_CATEGORY_NAME so check for that first
 		if strings.Contains(channel.Name, THREAD_ARCHIVE_CATEGORY_NAME) {
 			name := strings.TrimSpace(strings.Split(channel.Name, THREAD_ARCHIVE_CATEGORY_NAME)[0])
 			category := categories[name]
@@ -201,7 +202,7 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 		for i, channel := range category.archiveCategories {
 			if i == 0 {
 				nextArchiveCategoryIndex = indexForThreadArchive(channel) + 1
-				//It can only be active if there's at least one thread slot
+				// It can only be active if there's at least one thread slot
 				if b.numThreadsInCategory(channel) < MAX_CATEGORY_CHANNELS {
 					activeArchiveCategoryID = channel.ID
 				}
@@ -264,8 +265,8 @@ func (b *bot) threadsInCategory(category *discordgo.Channel) []*discordgo.Channe
 	return result
 }
 
-//Moves this thread to position 0, sliding everything else down, but maintaining
-//their order.
+// Moves this thread to position 0, sliding everything else down, but maintaining
+// their order.
 func (b *bot) moveThreadToTopOfCategory(thread *discordgo.Channel) error {
 
 	guild, err := b.session.State.Guild(thread.GuildID)
@@ -273,7 +274,7 @@ func (b *bot) moveThreadToTopOfCategory(thread *discordgo.Channel) error {
 		return fmt.Errorf("couldn't fetch guild: %w", err)
 	}
 	var threads byDiscordOrder
-	//the thread we want to move to the head, but refreshed
+	// the thread we want to move to the head, but refreshed
 	var headThread *discordgo.Channel
 	for _, channel := range guild.Channels {
 		if channel.ParentID == thread.ParentID {
@@ -285,7 +286,7 @@ func (b *bot) moveThreadToTopOfCategory(thread *discordgo.Channel) error {
 		}
 	}
 
-	//The order we come across them in has nothing to do with their actual order...
+	// The order we come across them in has nothing to do with their actual order...
 	sort.Sort(threads)
 
 	if headThread == nil {
@@ -309,7 +310,7 @@ func (b *bot) moveThreadToTopOfThreads(thread *discordgo.Channel) error {
 
 	fmt.Println("Popping thread " + nameForThread(thread) + " to top because it received a new message")
 
-	//TODO: conceptually we should move this to the given category if it's not in it yet.
+	// TODO: conceptually we should move this to the given category if it's not in it yet.
 	return b.moveThreadToTopOfCategory(thread)
 
 }
@@ -325,7 +326,7 @@ func (b byArchiveIndex) Swap(i, j int) {
 func (b byArchiveIndex) Less(i, j int) bool {
 	left := b[i]
 	right := b[j]
-	//Sort so the ones with the higher index come first
+	// Sort so the ones with the higher index come first
 	return indexForThreadArchive(left) > indexForThreadArchive(right)
 }
 
@@ -340,8 +341,8 @@ func (b byDiscordOrder) Swap(i, j int) {
 func (b byDiscordOrder) Less(i, j int) bool {
 	left := b[i]
 	right := b[j]
-	//Notionally this should be similar logic to https://github.com/Rapptz/discord.py/issues/2392#issuecomment-707455919
-	//For now simply sorting by position index is fine
+	// Notionally this should be similar logic to https://github.com/Rapptz/discord.py/issues/2392#issuecomment-707455919
+	// For now simply sorting by position index is fine
 
 	return left.Position < right.Position
 }
@@ -354,7 +355,7 @@ func (g *threadGroupInfo) archiveThreadsIfNecessary() error {
 	threads := g.b.threadsInCategory(category)
 
 	if len(threads) <= maxActiveThreads {
-		//Not necessary to remove any
+		// Not necessary to remove any
 		return nil
 	}
 
@@ -374,7 +375,7 @@ func (g *threadGroupInfo) archiveThread(thread *discordgo.Channel) error {
 	fmt.Println("Archiving thread " + nameForThread(thread) + " to because it no longer fits")
 	var activeArchiveCategoryID = g.activeArchiveCategoryID
 	if activeArchiveCategoryID == "" {
-		//Need to create an archive category to put into
+		// Need to create an archive category to put into
 
 		guild, err := g.b.session.State.Guild(thread.GuildID)
 		if err != nil {
@@ -411,7 +412,7 @@ func (g *threadGroupInfo) archiveThread(thread *discordgo.Channel) error {
 				Deny: discordgo.PermissionSendMessages,
 			},
 		}
-		//Copy over the main categorie's permissions
+		// Copy over the main categorie's permissions
 		extendedPermissions = append(extendedPermissions, mainCategory.PermissionOverwrites...)
 
 		archiveCategory, err := g.b.session.GuildChannelCreateComplex(thread.GuildID, discordgo.GuildChannelCreateData{
@@ -433,11 +434,11 @@ func (g *threadGroupInfo) archiveThread(thread *discordgo.Channel) error {
 	}
 
 	_, err = g.b.session.ChannelEditComplex(thread.ID, &discordgo.ChannelEdit{
-		//This is a generally reasonable default, especially because by default
-		//there will very often only be one.
+		// This is a generally reasonable default, especially because by default
+		// there will very often only be one.
 		Position: 0,
 		ParentID: activeArchiveCategoryID,
-		//Set the same permission overwrites so it will be synced
+		// Set the same permission overwrites so it will be synced
 		PermissionOverwrites: archiveCategory.PermissionOverwrites,
 	})
 
@@ -445,10 +446,10 @@ func (g *threadGroupInfo) archiveThread(thread *discordgo.Channel) error {
 		return fmt.Errorf("couldn't move categories: %w", err)
 	}
 
-	//TODO: we really should make sure the thread is at the top of the archive.
-	//But b.moveThreadToTopOfCategory won't work naively because at this point
-	//we haven't yet received the channelUpdate message (I think). Currently the
-	//behavior works OK if only one thread is being archived.
+	// TODO: we really should make sure the thread is at the top of the archive.
+	// But b.moveThreadToTopOfCategory won't work naively because at this point
+	// we haven't yet received the channelUpdate message (I think). Currently the
+	// behavior works OK if only one thread is being archived.
 
 	return nil
 }
