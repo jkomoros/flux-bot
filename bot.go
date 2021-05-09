@@ -20,7 +20,6 @@ type bot struct {
 }
 
 type threadGroupInfo struct {
-	b                        *bot
 	name                     string
 	threadCategoryID         string
 	nextArchiveCategoryIndex int
@@ -60,7 +59,7 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 		fmt.Printf("Couldn't find guild with ID %v", event.Guild.ID)
 	}
 	for _, group := range guildInfos {
-		if err := group.archiveThreadsIfNecessary(); err != nil {
+		if err := group.archiveThreadsIfNecessary(b.session); err != nil {
 			fmt.Printf("Couldn't archive extra threads on boot: %v", err)
 		}
 	}
@@ -98,7 +97,7 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 		return
 	}
 	for _, group := range guildInfos {
-		if err := group.archiveThreadsIfNecessary(); err != nil {
+		if err := group.archiveThreadsIfNecessary(b.session); err != nil {
 			fmt.Printf("Couldn't archive threads if necessary: %v", err)
 		}
 	}
@@ -150,7 +149,7 @@ type categoryStruct struct {
 	archiveCategories byArchiveIndex
 }
 
-func (b *bot) createCategoryMap(guild *discordgo.Guild, alert bool) (infos categoryMap) {
+func createCategoryMap(guild *discordgo.Guild, alert bool) (infos categoryMap) {
 	categories := make(map[string]*categoryStruct)
 
 	for _, channel := range guild.Channels {
@@ -193,7 +192,7 @@ func (b *bot) createCategoryMap(guild *discordgo.Guild, alert bool) (infos categ
 			if i == 0 {
 				nextArchiveCategoryIndex = indexForThreadArchive(channel) + 1
 				// It can only be active if there's at least one thread slot
-				if b.numThreadsInCategory(guild, channel) < MAX_CATEGORY_CHANNELS {
+				if numThreadsInCategory(guild, channel) < MAX_CATEGORY_CHANNELS {
 					activeArchiveCategoryID = channel.ID
 				}
 			}
@@ -210,7 +209,6 @@ func (b *bot) createCategoryMap(guild *discordgo.Guild, alert bool) (infos categ
 		}
 
 		info := &threadGroupInfo{
-			b:                        b,
 			name:                     name,
 			threadCategoryID:         category.threadGroup.ID,
 			activeArchiveCategoryID:  activeArchiveCategoryID,
@@ -241,22 +239,22 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 		return
 	}
 
-	infos := b.createCategoryMap(guild, alert)
+	infos := createCategoryMap(guild, alert)
 
 	b.infoMutex.Lock()
 	b.infos[guild.ID] = infos
 	b.infoMutex.Unlock()
 }
 
-func (b *bot) numThreadsInCategory(guild *discordgo.Guild, category *discordgo.Channel) int {
-	threads := b.threadsInCategory(guild, category)
+func numThreadsInCategory(guild *discordgo.Guild, category *discordgo.Channel) int {
+	threads := threadsInCategory(guild, category)
 	if threads == nil {
 		return -1
 	}
 	return len(threads)
 }
 
-func (b *bot) threadsInCategory(guild *discordgo.Guild, category *discordgo.Channel) []*discordgo.Channel {
+func threadsInCategory(guild *discordgo.Guild, category *discordgo.Channel) []*discordgo.Channel {
 	var result byDiscordOrder
 	for _, channel := range guild.Channels {
 		if channel.ParentID == category.ID {
@@ -349,17 +347,17 @@ func (b byDiscordOrder) Less(i, j int) bool {
 	return left.Position < right.Position
 }
 
-func (g *threadGroupInfo) archiveThreadsIfNecessary() error {
-	category, err := g.b.session.State.Channel(g.threadCategoryID)
+func (g *threadGroupInfo) archiveThreadsIfNecessary(session *discordgo.Session) error {
+	category, err := session.State.Channel(g.threadCategoryID)
 	if err != nil {
 		return fmt.Errorf("archiveThreadsIfNecessary couldn't find category: %w", err)
 	}
-	guild, err := g.b.session.State.Guild(category.GuildID)
+	guild, err := session.State.Guild(category.GuildID)
 	if err != nil {
 		return fmt.Errorf("archiveThreadsIfNecessary couldn't find guild: %w", err)
 	}
 
-	threads := g.b.threadsInCategory(guild, category)
+	threads := threadsInCategory(guild, category)
 
 	if len(threads) <= maxActiveThreads {
 		// Not necessary to remove any
@@ -370,7 +368,7 @@ func (g *threadGroupInfo) archiveThreadsIfNecessary() error {
 
 	for i := 0; i < extraCount; i++ {
 		thread := threads[len(threads)-1-i]
-		if err := g.archiveThread(thread); err != nil {
+		if err := g.archiveThread(session, thread); err != nil {
 			return fmt.Errorf("couldn't archive thread %v: %w", i, err)
 		}
 	}
@@ -378,18 +376,18 @@ func (g *threadGroupInfo) archiveThreadsIfNecessary() error {
 	return nil
 }
 
-func (g *threadGroupInfo) archiveThread(thread *discordgo.Channel) error {
+func (g *threadGroupInfo) archiveThread(session *discordgo.Session, thread *discordgo.Channel) error {
 	fmt.Println("Archiving thread " + nameForThread(thread) + " to because it no longer fits")
 	var activeArchiveCategoryID = g.activeArchiveCategoryID
 	if activeArchiveCategoryID == "" {
 		// Need to create an archive category to put into
 
-		guild, err := g.b.session.State.Guild(thread.GuildID)
+		guild, err := session.State.Guild(thread.GuildID)
 		if err != nil {
 			return fmt.Errorf("couldn't get guild: %w", err)
 		}
 
-		mainCategory, err := g.b.session.State.Channel(g.threadCategoryID)
+		mainCategory, err := session.State.Channel(g.threadCategoryID)
 		if err != nil {
 			return fmt.Errorf("couldn't get main category: %w", err)
 		}
@@ -422,7 +420,7 @@ func (g *threadGroupInfo) archiveThread(thread *discordgo.Channel) error {
 		// Copy over the main categorie's permissions
 		extendedPermissions = append(extendedPermissions, mainCategory.PermissionOverwrites...)
 
-		archiveCategory, err := g.b.session.GuildChannelCreateComplex(thread.GuildID, discordgo.GuildChannelCreateData{
+		archiveCategory, err := session.GuildChannelCreateComplex(thread.GuildID, discordgo.GuildChannelCreateData{
 			Name:                 name,
 			Type:                 discordgo.ChannelTypeGuildCategory,
 			PermissionOverwrites: extendedPermissions,
@@ -435,12 +433,12 @@ func (g *threadGroupInfo) archiveThread(thread *discordgo.Channel) error {
 		activeArchiveCategoryID = archiveCategory.ID
 	}
 
-	archiveCategory, err := g.b.session.State.Channel(activeArchiveCategoryID)
+	archiveCategory, err := session.State.Channel(activeArchiveCategoryID)
 	if err != nil {
 		return fmt.Errorf("couldn't fetch archiveCategory: %w", err)
 	}
 
-	_, err = g.b.session.ChannelEditComplex(thread.ID, &discordgo.ChannelEdit{
+	_, err = session.ChannelEditComplex(thread.ID, &discordgo.ChannelEdit{
 		// This is a generally reasonable default, especially because by default
 		// there will very often only be one.
 		Position: 0,
