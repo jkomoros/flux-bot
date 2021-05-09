@@ -10,10 +10,12 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+type categoryMap map[string]*threadGroupInfo
+
 type bot struct {
 	session *discordgo.Session
 	//guildID -> threadCategoryChannelID -> info
-	infos     map[string]map[string]*threadGroupInfo
+	infos     map[string]categoryMap
 	infoMutex sync.RWMutex
 }
 
@@ -34,7 +36,7 @@ type byDiscordOrder []*discordgo.Channel
 func newBot(s *discordgo.Session) *bot {
 	result := &bot{
 		session: s,
-		infos:   make(map[string]map[string]*threadGroupInfo),
+		infos:   make(map[string]categoryMap),
 	}
 	s.AddHandler(result.ready)
 	s.AddHandler(result.guildCreate)
@@ -114,7 +116,7 @@ func (b *bot) setGuildNeedsInfoRegeneration(guildID string) {
 	b.infoMutex.Unlock()
 }
 
-func (b *bot) getInfos(guildID string) map[string]*threadGroupInfo {
+func (b *bot) getInfos(guildID string) categoryMap {
 	b.infoMutex.RLock()
 	currentInfos := b.infos[guildID]
 	b.infoMutex.RUnlock()
@@ -148,7 +150,7 @@ type categoryStruct struct {
 	archiveCategories byArchiveIndex
 }
 
-func (b *bot) createCategoryMap(guild *discordgo.Guild, alert bool) (infos map[string]*threadGroupInfo) {
+func (b *bot) createCategoryMap(guild *discordgo.Guild, alert bool) (infos categoryMap) {
 	categories := make(map[string]*categoryStruct)
 
 	for _, channel := range guild.Channels {
@@ -178,7 +180,7 @@ func (b *bot) createCategoryMap(guild *discordgo.Guild, alert bool) (infos map[s
 
 	}
 
-	infos = make(map[string]*threadGroupInfo)
+	infos = make(categoryMap)
 
 	for name, category := range categories {
 
@@ -244,7 +246,6 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 	b.infoMutex.Lock()
 	b.infos[guild.ID] = infos
 	b.infoMutex.Unlock()
-
 }
 
 func (b *bot) numThreadsInCategory(category *discordgo.Channel) int {
