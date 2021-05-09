@@ -148,19 +148,7 @@ type categoryStruct struct {
 	archiveCategories byArchiveIndex
 }
 
-// rebuildCategoryMap should be called any time the categories in the given guild
-// may have changed, e.g. a channel was created, updated, or the guild was seen
-// for the first time. if alert is true, then it will print formatting if it
-// errors.
-func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
-
-	guild, err := b.session.State.Guild(guildID)
-
-	if err != nil {
-		fmt.Println("Couldn't get guild " + guildID)
-		return
-	}
-
+func (b *bot) createCategoryMap(guild *discordgo.Guild, alert bool) (infos map[string]*threadGroupInfo) {
 	categories := make(map[string]*categoryStruct)
 
 	for _, channel := range guild.Channels {
@@ -190,7 +178,7 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 
 	}
 
-	infos := make(map[string]*threadGroupInfo)
+	infos = make(map[string]*threadGroupInfo)
 
 	for name, category := range categories {
 
@@ -236,6 +224,23 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 			fmt.Println(guild.Name + " (ID " + guild.ID + ") joined but didn't have a category named " + THREAD_CATEGORY_NAME)
 		}
 	}
+	return
+}
+
+// rebuildCategoryMap should be called any time the categories in the given guild
+// may have changed, e.g. a channel was created, updated, or the guild was seen
+// for the first time. if alert is true, then it will print formatting if it
+// errors.
+func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
+	guild, err := b.session.State.Guild(guildID)
+
+	if err != nil {
+		fmt.Println("Couldn't get guild " + guildID)
+		return
+	}
+
+	infos := b.createCategoryMap(guild, alert)
+
 	b.infoMutex.Lock()
 	b.infos[guild.ID] = infos
 	b.infoMutex.Unlock()
