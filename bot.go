@@ -193,7 +193,7 @@ func (b *bot) createCategoryMap(guild *discordgo.Guild, alert bool) (infos categ
 			if i == 0 {
 				nextArchiveCategoryIndex = indexForThreadArchive(channel) + 1
 				// It can only be active if there's at least one thread slot
-				if b.numThreadsInCategory(channel) < MAX_CATEGORY_CHANNELS {
+				if b.numThreadsInCategory(guild, channel) < MAX_CATEGORY_CHANNELS {
 					activeArchiveCategoryID = channel.ID
 				}
 			}
@@ -248,19 +248,15 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 	b.infoMutex.Unlock()
 }
 
-func (b *bot) numThreadsInCategory(category *discordgo.Channel) int {
-	threads := b.threadsInCategory(category)
+func (b *bot) numThreadsInCategory(guild *discordgo.Guild, category *discordgo.Channel) int {
+	threads := b.threadsInCategory(guild, category)
 	if threads == nil {
 		return -1
 	}
 	return len(threads)
 }
 
-func (b *bot) threadsInCategory(category *discordgo.Channel) []*discordgo.Channel {
-	guild, err := b.session.State.Guild(category.GuildID)
-	if err != nil {
-		return nil
-	}
+func (b *bot) threadsInCategory(guild *discordgo.Guild, category *discordgo.Channel) []*discordgo.Channel {
 	var result byDiscordOrder
 	for _, channel := range guild.Channels {
 		if channel.ParentID == category.ID {
@@ -358,7 +354,12 @@ func (g *threadGroupInfo) archiveThreadsIfNecessary() error {
 	if err != nil {
 		return fmt.Errorf("archiveThreadsIfNecessary couldn't find category: %w", err)
 	}
-	threads := g.b.threadsInCategory(category)
+	guild, err := g.b.session.State.Guild(category.GuildID)
+	if err != nil {
+		return fmt.Errorf("archiveThreadsIfNecessary couldn't find guild: %w", err)
+	}
+
+	threads := g.b.threadsInCategory(guild, category)
 
 	if len(threads) <= maxActiveThreads {
 		// Not necessary to remove any
