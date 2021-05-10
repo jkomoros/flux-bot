@@ -12,5 +12,9 @@
 *.out
 gale-x-bot
 
+# Configuration files
+*.code-workspace
+.vscode
+
 # Dependency directories (remove the comment below to include it)
 # vendor/
