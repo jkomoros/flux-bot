@@ -8,12 +8,13 @@ import (
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jkomoros/gale-x-bot/discord"
 )
 
 type categoryMap map[string]*threadGroupInfo
 
 type bot struct {
-	session *discordgo.Session
+	session discord.Session
 	//guildID -> threadCategoryChannelID -> info
 	infos     map[string]categoryMap
 	infoMutex sync.RWMutex
@@ -32,7 +33,7 @@ type byArchiveIndex []*discordgo.Channel
 //Sort in a similar way as the main discord client
 type byDiscordOrder []*discordgo.Channel
 
-func newBot(s *discordgo.Session) *bot {
+func newBot(s discord.Session) *bot {
 	result := &bot{
 		session: s,
 		infos:   make(map[string]categoryMap),
@@ -232,7 +233,7 @@ func createCategoryMap(guild *discordgo.Guild, alert bool) (infos categoryMap) {
 // for the first time. if alert is true, then it will print formatting if it
 // errors.
 func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
-	guild, err := b.session.State.Guild(guildID)
+	guild, err := b.session.GetState().Guild(guildID)
 
 	if err != nil {
 		fmt.Println("Couldn't get guild " + guildID)
@@ -269,7 +270,7 @@ func threadsInCategory(guild *discordgo.Guild, category *discordgo.Channel) []*d
 // their order.
 func (b *bot) moveThreadToTopOfCategory(thread *discordgo.Channel) error {
 
-	guild, err := b.session.State.Guild(thread.GuildID)
+	guild, err := b.session.GetState().Guild(thread.GuildID)
 	if err != nil {
 		return fmt.Errorf("couldn't fetch guild: %w", err)
 	}
@@ -347,12 +348,12 @@ func (b byDiscordOrder) Less(i, j int) bool {
 	return left.Position < right.Position
 }
 
-func (g *threadGroupInfo) archiveThreadsIfNecessary(session *discordgo.Session) error {
-	category, err := session.State.Channel(g.threadCategoryID)
+func (g *threadGroupInfo) archiveThreadsIfNecessary(session discord.Session) error {
+	category, err := session.GetState().Channel(g.threadCategoryID)
 	if err != nil {
 		return fmt.Errorf("archiveThreadsIfNecessary couldn't find category: %w", err)
 	}
-	guild, err := session.State.Guild(category.GuildID)
+	guild, err := session.GetState().Guild(category.GuildID)
 	if err != nil {
 		return fmt.Errorf("archiveThreadsIfNecessary couldn't find guild: %w", err)
 	}
@@ -376,18 +377,18 @@ func (g *threadGroupInfo) archiveThreadsIfNecessary(session *discordgo.Session) 
 	return nil
 }
 
-func (g *threadGroupInfo) archiveThread(session *discordgo.Session, thread *discordgo.Channel) error {
+func (g *threadGroupInfo) archiveThread(session discord.Session, thread *discordgo.Channel) error {
 	fmt.Println("Archiving thread " + nameForThread(thread) + " to because it no longer fits")
 	var activeArchiveCategoryID = g.activeArchiveCategoryID
 	if activeArchiveCategoryID == "" {
 		// Need to create an archive category to put into
 
-		guild, err := session.State.Guild(thread.GuildID)
+		guild, err := session.GetState().Guild(thread.GuildID)
 		if err != nil {
 			return fmt.Errorf("couldn't get guild: %w", err)
 		}
 
-		mainCategory, err := session.State.Channel(g.threadCategoryID)
+		mainCategory, err := session.GetState().Channel(g.threadCategoryID)
 		if err != nil {
 			return fmt.Errorf("couldn't get main category: %w", err)
 		}
@@ -433,7 +434,7 @@ func (g *threadGroupInfo) archiveThread(session *discordgo.Session, thread *disc
 		activeArchiveCategoryID = archiveCategory.ID
 	}
 
-	archiveCategory, err := session.State.Channel(activeArchiveCategoryID)
+	archiveCategory, err := session.GetState().Channel(activeArchiveCategoryID)
 	if err != nil {
 		return fmt.Errorf("couldn't fetch archiveCategory: %w", err)
 	}
