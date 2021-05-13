@@ -31,3 +31,30 @@ func (s *sessionWrapper) GuildChannelCreateComplex(guildID string, data discordg
 func (s *sessionWrapper) ChannelEditComplex(channelID string, data *discordgo.ChannelEdit) (st *discordgo.Channel, err error) {
 	return s.session.ChannelEditComplex(channelID, data)
 }
+
+type sessionStubWrapper struct {
+}
+
+func NewSessionStubWrapper() *sessionStubWrapper {
+	return nil
+}
+
+func (s *sessionStubWrapper) AddHandler(handler interface{}) func() {
+	return nil
+}
+
+func (s *sessionStubWrapper) GetState() *discordgo.State {
+	return nil
+}
+
+func (s *sessionStubWrapper) GuildChannelsReorder(guildID string, channels []*discordgo.Channel) error {
+	return nil
+}
+
+func (s *sessionStubWrapper) GuildChannelCreateComplex(guildID string, data discordgo.GuildChannelCreateData) (st *discordgo.Channel, err error) {
+	return nil, nil
+}
+
+func (s *sessionStubWrapper) ChannelEditComplex(channelID string, data *discordgo.ChannelEdit) (st *discordgo.Channel, err error) {
+	return nil, nil
+}
