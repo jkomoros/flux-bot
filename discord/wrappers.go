@@ -4,11 +4,13 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+// These types wrap around the discordgo API to enable testing and to track used API surface.
+
 type sessionWrapper struct {
 	session *discordgo.Session
 }
 
-func NewSessionWrapper(session *discordgo.Session) *sessionWrapper {
+func NewSession(session *discordgo.Session) *sessionWrapper {
 	return &sessionWrapper{session}
 }
 

@@ -70,7 +70,7 @@ func main() {
 	}
 
 	// Register ready as a callback for the ready events.
-	wrapper := discord.NewSessionWrapper(dg)
+	wrapper := discord.NewSession(dg)
 	newBot(wrapper)
 
 	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages
