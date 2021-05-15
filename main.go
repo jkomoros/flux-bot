@@ -9,7 +9,6 @@ import (
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/jkomoros/gale-x-bot/discord"
 )
 
 func init() {
@@ -73,8 +72,7 @@ func main() {
 	}
 
 	// Register ready as a callback for the ready events.
-	wrapper := discord.NewSessionWrapper(dg)
-	newBot(wrapper)
+	newBot(dg)
 
 	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages
 
