@@ -13,3 +13,7 @@ type Session interface {
 	GuildChannelCreateComplex(guildID string, data discordgo.GuildChannelCreateData) (st *discordgo.Channel, err error)
 	ChannelEditComplex(channelID string, data *discordgo.ChannelEdit) (st *discordgo.Channel, err error)
 }
+
+type Guild interface {
+	GetID() string
+}

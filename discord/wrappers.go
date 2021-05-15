@@ -14,10 +14,10 @@ func NewSession(session *discordgo.Session) *sessionWrapper {
 	return &sessionWrapper{session}
 }
 
-// Event handler wrapper types
-// Anytime you start listening to a new event, wrap it here
+// Event handler wrapper types.
+// Anytime you start listening to a new event, wrap it here.
 type Ready func(Session)
-type GuildCreate func(Session, *discordgo.GuildCreate)
+type GuildCreate func(Session, Guild)
 type MessageCreate func(Session, *discordgo.MessageCreate)
 type ChannelCreate func(Session, *discordgo.ChannelCreate)
 type ChannelUpdate func(Session, *discordgo.ChannelUpdate)
@@ -29,10 +29,10 @@ func (s *sessionWrapper) AddHandler(handler interface{}) func() {
 			ready := Ready(v)
 			ready(NewSession(session))
 		})
-	case func(Session, *discordgo.GuildCreate):
+	case func(Session, Guild):
 		return s.session.AddHandler(func(session *discordgo.Session, event *discordgo.GuildCreate) {
 			guildCreate := GuildCreate(v)
-			guildCreate(NewSession(session), event)
+			guildCreate(NewSession(session), newGuildWrapper(event.Guild))
 		})
 	case func(Session, *discordgo.MessageCreate):
 		return s.session.AddHandler(func(session *discordgo.Session, event *discordgo.MessageCreate) {
@@ -67,4 +67,16 @@ func (s *sessionWrapper) GuildChannelCreateComplex(guildID string, data discordg
 
 func (s *sessionWrapper) ChannelEditComplex(channelID string, data *discordgo.ChannelEdit) (st *discordgo.Channel, err error) {
 	return s.session.ChannelEditComplex(channelID, data)
+}
+
+type guildWrapper struct {
+	guild *discordgo.Guild
+}
+
+func newGuildWrapper(guild *discordgo.Guild) *guildWrapper {
+	return &guildWrapper{guild}
+}
+
+func (g *guildWrapper) GetID() string {
+	return g.guild.ID
 }

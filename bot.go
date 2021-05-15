@@ -53,11 +53,11 @@ func (b *bot) ready(s discord.Session) {
 }
 
 // discordgo callback: called after the bot starts up for each guild it's added to
-func (b *bot) guildCreate(s discord.Session, event *discordgo.GuildCreate) {
-	b.setGuildNeedsInfoRegeneration(event.Guild.ID)
-	guildInfos := b.getInfos(event.Guild.ID)
+func (b *bot) guildCreate(s discord.Session, guild discord.Guild) {
+	b.setGuildNeedsInfoRegeneration(guild.GetID())
+	guildInfos := b.getInfos(guild.GetID())
 	if guildInfos == nil {
-		fmt.Printf("Couldn't find guild with ID %v", event.Guild.ID)
+		fmt.Printf("Couldn't find guild with ID %v", guild.GetID())
 	}
 	for _, group := range guildInfos {
 		if err := group.archiveThreadsIfNecessary(b.session); err != nil {

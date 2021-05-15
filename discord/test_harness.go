@@ -31,7 +31,7 @@ func (s *SessionTestDriver) AddHandler(handler interface{}) func() {
 	switch v := handler.(type) {
 	case func(Session):
 		s.ready = Ready(v)
-	case func(Session, *discordgo.GuildCreate):
+	case func(Session, Guild):
 		s.guildCreate = GuildCreate(v)
 	case func(Session, *discordgo.MessageCreate):
 		s.messageCreate = MessageCreate(v)
