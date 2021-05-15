@@ -13,7 +13,7 @@ type SessionTestDriver struct {
 	HasUnknownHandlers bool
 }
 
-func NewSessionTestDriver() *SessionTestDriver {
+func NewTestDriver() *SessionTestDriver {
 	return &SessionTestDriver{}
 }
 
