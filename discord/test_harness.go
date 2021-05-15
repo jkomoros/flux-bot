@@ -4,18 +4,12 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-type readyEventHandler func(*discordgo.Session, *discordgo.Ready)
-type guildCreateEventHandler func(*discordgo.Session, *discordgo.GuildCreate)
-type messageCreateHandler func(*discordgo.Session, *discordgo.MessageCreate)
-type channelCreateHandler func(*discordgo.Session, *discordgo.ChannelCreate)
-type channelUpdateHandler func(*discordgo.Session, *discordgo.ChannelUpdate)
-
 type SessionTestDriver struct {
-	ready              readyEventHandler
-	guildCreate        guildCreateEventHandler
-	messageCreate      messageCreateHandler
-	channelCreate      channelCreateHandler
-	channelUpdate      channelUpdateHandler
+	ready              Ready
+	guildCreate        GuildCreate
+	messageCreate      MessageCreate
+	channelCreate      ChannelCreate
+	channelUpdate      ChannelUpdate
 	HasUnknownHandlers bool
 }
 
@@ -27,7 +21,7 @@ func (s *SessionTestDriver) InvokeReady() bool {
 	if s.ready == nil {
 		return false
 	}
-	s.ready(nil, nil)
+	s.ready(s)
 	return true
 }
 
@@ -35,16 +29,16 @@ func (s *SessionTestDriver) InvokeReady() bool {
 
 func (s *SessionTestDriver) AddHandler(handler interface{}) func() {
 	switch v := handler.(type) {
-	case func(*discordgo.Session, *discordgo.Ready):
-		s.ready = readyEventHandler(v)
-	case func(*discordgo.Session, *discordgo.GuildCreate):
-		s.guildCreate = guildCreateEventHandler(v)
-	case func(*discordgo.Session, *discordgo.MessageCreate):
-		s.messageCreate = messageCreateHandler(v)
-	case func(*discordgo.Session, *discordgo.ChannelCreate):
-		s.channelCreate = channelCreateHandler(v)
-	case func(*discordgo.Session, *discordgo.ChannelUpdate):
-		s.channelUpdate = channelUpdateHandler(v)
+	case func(Session):
+		s.ready = Ready(v)
+	case func(Session, *discordgo.GuildCreate):
+		s.guildCreate = GuildCreate(v)
+	case func(Session, *discordgo.MessageCreate):
+		s.messageCreate = MessageCreate(v)
+	case func(Session, *discordgo.ChannelCreate):
+		s.channelCreate = ChannelCreate(v)
+	case func(Session, *discordgo.ChannelUpdate):
+		s.channelUpdate = ChannelUpdate(v)
 	default:
 		s.HasUnknownHandlers = true
 	}

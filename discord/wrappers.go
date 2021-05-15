@@ -14,8 +14,43 @@ func NewSession(session *discordgo.Session) *sessionWrapper {
 	return &sessionWrapper{session}
 }
 
+// Event handler wrapper types
+// Anytime you start listening to a new event, wrap it here
+type Ready func(Session)
+type GuildCreate func(Session, *discordgo.GuildCreate)
+type MessageCreate func(Session, *discordgo.MessageCreate)
+type ChannelCreate func(Session, *discordgo.ChannelCreate)
+type ChannelUpdate func(Session, *discordgo.ChannelUpdate)
+
 func (s *sessionWrapper) AddHandler(handler interface{}) func() {
-	return s.session.AddHandler(handler)
+	switch v := handler.(type) {
+	case func(Session):
+		return s.session.AddHandler(func(session *discordgo.Session, event *discordgo.Ready) {
+			ready := Ready(v)
+			ready(NewSession(session))
+		})
+	case func(Session, *discordgo.GuildCreate):
+		return s.session.AddHandler(func(session *discordgo.Session, event *discordgo.GuildCreate) {
+			guildCreate := GuildCreate(v)
+			guildCreate(NewSession(session), event)
+		})
+	case func(Session, *discordgo.MessageCreate):
+		return s.session.AddHandler(func(session *discordgo.Session, event *discordgo.MessageCreate) {
+			messageCreate := MessageCreate(v)
+			messageCreate(NewSession(session), event)
+		})
+	case func(Session, *discordgo.ChannelCreate):
+		return s.session.AddHandler(func(session *discordgo.Session, event *discordgo.ChannelCreate) {
+			channelCreate := ChannelCreate(v)
+			channelCreate(NewSession(session), event)
+		})
+	case func(Session, *discordgo.ChannelUpdate):
+		return s.session.AddHandler(func(session *discordgo.Session, event *discordgo.ChannelUpdate) {
+			channelCreate := ChannelUpdate(v)
+			channelCreate(NewSession(session), event)
+		})
+	}
+	return nil
 }
 
 func (s *sessionWrapper) GetState() *discordgo.State {

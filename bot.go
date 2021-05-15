@@ -47,13 +47,13 @@ func newBot(s discord.Session) *bot {
 }
 
 // discordgo callback: called when the bot receives the "ready" event from Discord.
-func (b *bot) ready(s *discordgo.Session, event *discordgo.Ready) {
+func (b *bot) ready(s discord.Session) {
 	//GuildInfo isn't populated yet.
 	fmt.Println("Ready and waiting!")
 }
 
 // discordgo callback: called after the bot starts up for each guild it's added to
-func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
+func (b *bot) guildCreate(s discord.Session, event *discordgo.GuildCreate) {
 	b.setGuildNeedsInfoRegeneration(event.Guild.ID)
 	guildInfos := b.getInfos(event.Guild.ID)
 	if guildInfos == nil {
@@ -67,8 +67,8 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 }
 
 // discordgo callback: called after the when new message is posted.
-func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
-	channel, err := s.State.Channel(event.ChannelID)
+func (b *bot) messageCreate(s discord.Session, event *discordgo.MessageCreate) {
+	channel, err := s.GetState().Channel(event.ChannelID)
 	if err != nil {
 		fmt.Println("Couldn't find channel")
 		return
@@ -82,7 +82,7 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 }
 
 // discordgo callback: called after new channel is created.
-func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate) {
+func (b *bot) channelCreate(s discord.Session, event *discordgo.ChannelCreate) {
 	b.setGuildNeedsInfoRegeneration(event.GuildID)
 
 	channel := event.Channel
@@ -106,7 +106,7 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 
 // discordgo callback: channelUpdate happens a LOT, e.g. every time we reorder a channel, every
 // single channel whose index changed will get called one at a time.
-func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate) {
+func (b *bot) channelUpdate(s discord.Session, event *discordgo.ChannelUpdate) {
 	b.setGuildNeedsInfoRegeneration(event.GuildID)
 }
 
