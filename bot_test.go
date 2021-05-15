@@ -31,7 +31,7 @@ func TestReady(t *testing.T) {
 	bot.ready(session, newReadyEvent())
 }
 
-func TestGuildCreate(t *testing.T) {
+func TestGuildCreateSimple(t *testing.T) {
 	session := newSessionStub()
 	bot := newBot(session)
 	guild := &discordgo.Guild{
@@ -39,19 +39,79 @@ func TestGuildCreate(t *testing.T) {
 	}
 	// GuildID is necessary in archiveThreadsIfNecessary
 	// TODO: maybe find a way to not need it
-	guild.Channels = append(guild.Channels, &discordgo.Channel{
-		ID:      "channel-1",
-		Type:    discordgo.ChannelTypeGuildCategory,
-		Name:    THREAD_ARCHIVE_CATEGORY_NAME + " 72",
-		GuildID: "guild-1",
-	})
+	guild.Channels = []*discordgo.Channel{
+		{
+			ID:      "thread-category",
+			Type:    discordgo.ChannelTypeGuildCategory,
+			Name:    THREAD_ARCHIVE_CATEGORY_NAME + " 72",
+			GuildID: "guild-1",
+		},
+		{
+			ID:      "thread-archive-category",
+			Type:    discordgo.ChannelTypeGuildCategory,
+			Name:    THREAD_CATEGORY_NAME,
+			GuildID: "guild-1",
+		}}
+	guildCreate := newGuildCreate(guild)
+	session.State.GuildAdd(guildCreate.Guild)
+	bot.guildCreate(session, guildCreate)
+}
 
-	guild.Channels = append(guild.Channels, &discordgo.Channel{
-		ID:      "channel-2",
-		Type:    discordgo.ChannelTypeGuildCategory,
-		Name:    THREAD_CATEGORY_NAME,
-		GuildID: "guild-1",
-	})
+func TestGuildCreateTriggerArchive(t *testing.T) {
+	session := newSessionStub()
+	bot := newBot(session)
+	guildID := "guild-1"
+	guild := &discordgo.Guild{
+		ID: guildID,
+	}
+	guild.Channels = []*discordgo.Channel{
+		{
+			ID:      "thread-category",
+			Type:    discordgo.ChannelTypeGuildCategory,
+			Name:    THREAD_ARCHIVE_CATEGORY_NAME + " 72",
+			GuildID: guildID,
+		},
+		{
+			ID:      "thread-archive-category",
+			Type:    discordgo.ChannelTypeGuildCategory,
+			Name:    THREAD_CATEGORY_NAME,
+			GuildID: guildID,
+		},
+		{
+			ID:       "channel-3",
+			Type:     discordgo.ChannelTypeGuildCategory,
+			Name:     "channel-3",
+			GuildID:  guildID,
+			ParentID: "thread-category",
+		},
+		{
+			ID:       "channel-4",
+			Type:     discordgo.ChannelTypeGuildCategory,
+			Name:     "channel-4",
+			GuildID:  guildID,
+			ParentID: "thread-category",
+		},
+		{
+			ID:       "channel-5",
+			Type:     discordgo.ChannelTypeGuildCategory,
+			Name:     "channel-5",
+			GuildID:  guildID,
+			ParentID: "thread-category",
+		},
+		{
+			ID:       "channel-6",
+			Type:     discordgo.ChannelTypeGuildCategory,
+			Name:     "channel-6",
+			GuildID:  guildID,
+			ParentID: "thread-category",
+		},
+		{
+			ID:       "channel-7",
+			Type:     discordgo.ChannelTypeGuildCategory,
+			Name:     "channel-7",
+			GuildID:  guildID,
+			ParentID: "thread-category",
+		}}
 	guildCreate := newGuildCreate(guild)
 	session.State.GuildAdd(guildCreate.Guild)
 	bot.guildCreate(session, guildCreate)
