@@ -359,6 +359,8 @@ func (g *threadGroupInfo) archiveThreadsIfNecessary(session *discordgo.Session) 
 
 	threads := threadsInCategory(guild, category)
 
+	fmt.Println("thread count", len(threads))
+
 	if len(threads) <= maxActiveThreads {
 		// Not necessary to remove any
 		return nil
