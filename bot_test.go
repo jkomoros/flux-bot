@@ -11,21 +11,6 @@ const (
 	TEST_GUILD_ID string = "guild-1"
 )
 
-func newSessionStub() *discordgo.Session {
-	session, _ := discordgo.New(TEST_TOKEN)
-	return session
-}
-
-func newReadyEvent() *discordgo.Ready {
-	return nil
-}
-
-func newGuildCreate(guild *discordgo.Guild) *discordgo.GuildCreate {
-	return &discordgo.GuildCreate{
-		Guild: guild,
-	}
-}
-
 type TestController struct {
 	session                            *discordgo.Session
 	channelEditComplexCallCount        int
@@ -55,13 +40,13 @@ func (tc *TestController) GuildChannelsReorder(guildID string, channels []*disco
 }
 
 func TestReady(t *testing.T) {
-	session := newSessionStub()
+	session, _ := discordgo.New(TEST_TOKEN)
 	bot := newBot(session, &TestController{})
-	bot.ready(session, newReadyEvent())
+	bot.ready(session, nil)
 }
 
 func TestGuildCreateSimple(t *testing.T) {
-	session := newSessionStub()
+	session, _ := discordgo.New(TEST_TOKEN)
 	controller := &TestController{}
 	bot := newBot(session, controller)
 	guild := &discordgo.Guild{
@@ -83,7 +68,9 @@ func TestGuildCreateSimple(t *testing.T) {
 			GuildID: TEST_GUILD_ID,
 		}}
 	session.State.GuildAdd(guild)
-	bot.guildCreate(session, newGuildCreate((guild)))
+	bot.guildCreate(session, &discordgo.GuildCreate{
+		Guild: guild,
+	})
 	if controller.channelEditComplexCallCount != 0 {
 		t.Errorf("ChannelEditComplex should not have been called.")
 	}
@@ -93,7 +80,7 @@ func TestGuildCreateSimple(t *testing.T) {
 }
 
 func TestGuildCreateTriggerArchive(t *testing.T) {
-	session := newSessionStub()
+	session, _ := discordgo.New(TEST_TOKEN)
 	maxActiveThreads = 5
 	controller := &TestController{}
 	bot := newBot(session, controller)
@@ -156,7 +143,9 @@ func TestGuildCreateTriggerArchive(t *testing.T) {
 			ParentID: "thread-category",
 		}}
 	session.State.GuildAdd(guild)
-	bot.guildCreate(session, newGuildCreate((guild)))
+	bot.guildCreate(session, &discordgo.GuildCreate{
+		Guild: guild,
+	})
 	if controller.channelEditComplexCallCount != 1 {
 		t.Errorf("ChannelEditComplex should have been called once.")
 	}
@@ -166,7 +155,7 @@ func TestGuildCreateTriggerArchive(t *testing.T) {
 }
 
 func TestGuildCreateTriggerCreatingArchivedCategory(t *testing.T) {
-	session := newSessionStub()
+	session, _ := discordgo.New(TEST_TOKEN)
 	maxActiveThreads = 1
 	controller := &TestController{}
 	controller.session = session
@@ -203,7 +192,9 @@ func TestGuildCreateTriggerCreatingArchivedCategory(t *testing.T) {
 		},
 	}
 	session.State.GuildAdd(guild)
-	bot.guildCreate(session, newGuildCreate((guild)))
+	bot.guildCreate(session, &discordgo.GuildCreate{
+		Guild: guild,
+	})
 	if controller.channelEditComplexCallCount != 1 {
 		t.Errorf("ChannelEditComplex should have been called once.")
 	}
@@ -213,7 +204,7 @@ func TestGuildCreateTriggerCreatingArchivedCategory(t *testing.T) {
 }
 
 func TestMessageCreate(t *testing.T) {
-	session := newSessionStub()
+	session, _ := discordgo.New(TEST_TOKEN)
 	maxActiveThreads = 1
 	controller := &TestController{}
 	controller.session = session
@@ -249,26 +240,6 @@ func TestMessageCreate(t *testing.T) {
 			ID:        "message-1",
 			ChannelID: "channel-2",
 			GuildID:   TEST_GUILD_ID,
-			// Content:          "",
-			// Timestamp:        "",
-			// EditedTimestamp:  "",
-			// MentionRoles:     []string{},
-			// TTS:              false,
-			// MentionEveryone:  false,
-			// Author:           &discordgo.User{},
-			// Attachments:      []*discordgo.MessageAttachment{},
-			// Embeds:           []*discordgo.MessageEmbed{},
-			// Mentions:         []*discordgo.User{},
-			// Reactions:        []*discordgo.MessageReactions{},
-			// Pinned:           false,
-			// Type:             0,
-			// WebhookID:        "",
-			// Member:           &discordgo.Member{},
-			// MentionChannels:  []*discordgo.Channel{},
-			// Activity:         &discordgo.MessageActivity{},
-			// Application:      &discordgo.MessageApplication{},
-			// MessageReference: &discordgo.MessageReference{},
-			// Flags:            0,
 		},
 	})
 	if controller.guildChannelReorderCallCount != 1 {
