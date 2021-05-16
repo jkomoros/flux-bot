@@ -127,20 +127,38 @@ func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate
 func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.InteractionCreate) {
 	//NOTE: all handlers must use s.InteractionRespond or the user will see an error.
 	switch event.Interaction.Data.Name {
-	case FORK_COMMAND_NAME:
-		b.createThreadInteraction(s, event)
+	case ARCHIVE_COMMAND_NAME:
+		b.archiveThreadInteraction(s, event)
 	default:
 		fmt.Println("Unknown interaction name: " + event.Interaction.Data.Name)
 	}
 }
 
-func (b *bot) createThreadInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {
-	//TODO: do something more substantive
-	fmt.Println("Received interaction: " + event.Interaction.Data.Name)
+func (b *bot) archiveThreadInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {
+
+	channel, err := b.session.State.Channel(event.ChannelID)
+	if err != nil {
+		//TODO: respond to the interaction in the canonical way so it shows up in user's UI
+		fmt.Printf("Couldn't fetch channel %v: %v", event.ChannelID, err)
+		return
+	}
+	message := "Couldn't archive: "
+	gi := b.getThreadGroupInfoForThread(channel)
+	if gi != nil {
+		if err := gi.archiveThread(b.controller, s, channel); err != nil {
+			message += err.Error()
+			fmt.Println(message)
+		} else {
+			message = "Archived thread!"
+		}
+	} else {
+		message += "This channel is not a thread!"
+	}
+
 	s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionApplicationCommandResponseData{
-			Content: "Command received. TODO: do something",
+			Content: message,
 		},
 	})
 }

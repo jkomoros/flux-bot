@@ -32,22 +32,14 @@ var token string
 var maxActiveThreads int
 var debugGuildIDForCommand string
 
-const FORK_COMMAND_NAME = "fork"
+const ARCHIVE_COMMAND_NAME = "archive"
 
 var (
 	//When creating a command also update bot.interactionCreate to dispatch to the handler for the interaction
 	commands = []*discordgo.ApplicationCommand{
 		{
-			Name:        FORK_COMMAND_NAME,
-			Description: "Create a new thread with an OP copied from the message this slash command is in reply to",
-			Options: []*discordgo.ApplicationCommandOption{
-				{
-					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "title",
-					Description: "title of the thread to create",
-					Required:    true,
-				},
-			},
+			Name:        ARCHIVE_COMMAND_NAME,
+			Description: "Archive the current thread forcibly (not waiting for it to fall off the end)",
 		},
 	}
 )
