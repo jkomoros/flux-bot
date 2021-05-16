@@ -51,7 +51,8 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 //registerSlashCommands must be called after the bot is already connected
 func (b *bot) registerSlashCommands() error {
 	for _, v := range commands {
-		_, err := b.session.ApplicationCommandCreate(b.session.State.User.ID, "", v)
+		//debugGuildIDForCommand will be "" (global) in the common case, only set during development.
+		_, err := b.session.ApplicationCommandCreate(b.session.State.User.ID, debugGuildIDForCommand, v)
 		if err != nil {
 			return fmt.Errorf("couldn't register command %v: %w", v.Name, err)
 		}
@@ -130,7 +131,6 @@ func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.Interacti
 	default:
 		fmt.Println("Unknown interaction name: " + event.Interaction.Data.Name)
 	}
-
 }
 
 func (b *bot) createThreadInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {

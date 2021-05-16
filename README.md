@@ -46,6 +46,12 @@ Now you need to get the secret token that allows you to authenticate as your bot
 
 3. Run the app by doing `go build && ./gale-x-bot` . It will connect to your dev server and print out debug information.
 
+## Hacking on application commands
+
+Slash commands that are installed globally take an hour to roll out. When developing that can be a pain.
+
+You can provide `debug-guild-id` option (or `DEBUG_GUILD_ID` env var) to register the command only to a specific debug guild during development.
+
 ## Updating the production bot
 
 The production bot is running in a `tmux` session on a Google Cloud VM running Ubuntu.

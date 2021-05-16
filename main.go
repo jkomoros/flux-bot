@@ -14,6 +14,7 @@ import (
 const APP_NAME = "gale-x-bot"
 const TOKEN_ENV_NAME = "BOT_TOKEN"
 const MAX_ACTIVE_THREADS_ENV_NAME = "BOT_MAX_THREADS"
+const DEBUG_GUILD_ID_ENV_NAME = "DEBUG_GUILD_ID"
 
 //The name of the category this will look for that contains things this should treat as threads
 const THREAD_CATEGORY_NAME = "Threads"
@@ -29,6 +30,7 @@ const EVERYONE_ROLE_NAME = "@everyone"
 
 var token string
 var maxActiveThreads int
+var debugGuildIDForCommand string
 
 const FORK_COMMAND_NAME = "fork"
 
@@ -53,6 +55,7 @@ var (
 func main() {
 	flag.StringVar(&token, "t", "", "Bot Token")
 	flag.IntVar(&maxActiveThreads, "n", -1, "Max number of threads per group")
+	flag.StringVar(&debugGuildIDForCommand, "debug-guild-id", "", "The guild ID to register commands with, useful during testing since global commands take an hour to roll out")
 	flag.Parse()
 
 	if token == "" {
@@ -79,6 +82,13 @@ func main() {
 	if maxActiveThreads == -1 {
 		fmt.Println("No max_active_threads provided. Defaulting to " + strconv.Itoa(DEFAULT_MAX_ACTIVE_THREADS) + ". You can provide it with -n or set env var " + MAX_ACTIVE_THREADS_ENV_NAME)
 		maxActiveThreads = DEFAULT_MAX_ACTIVE_THREADS
+	}
+
+	if debugGuildIDForCommand == "" {
+		debugGuildIDForCommand = os.Getenv(DEBUG_GUILD_ID_ENV_NAME)
+		if debugGuildIDForCommand != "" {
+			fmt.Println("Using " + DEBUG_GUILD_ID_ENV_NAME + " env var: " + debugGuildIDForCommand)
+		}
 	}
 
 	// Create a new Discord session using the provided bot token.
