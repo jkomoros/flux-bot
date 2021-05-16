@@ -30,6 +30,26 @@ const EVERYONE_ROLE_NAME = "@everyone"
 var token string
 var maxActiveThreads int
 
+const FORK_COMMAND_NAME = "fork"
+
+var (
+	//When creating a command also update bot.interactionCreate to dispatch to the handler for the interaction
+	commands = []*discordgo.ApplicationCommand{
+		{
+			Name:        FORK_COMMAND_NAME,
+			Description: "Create a new thread with an OP copied from the message this slash command is in reply to",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "title",
+					Description: "title of the thread to create",
+					Required:    true,
+				},
+			},
+		},
+	}
+)
+
 func main() {
 	flag.StringVar(&token, "t", "", "Bot Token")
 	flag.IntVar(&maxActiveThreads, "n", -1, "Max number of threads per group")
@@ -69,7 +89,7 @@ func main() {
 	}
 
 	// Register ready as a callback for the ready events.
-	newBot(dg, &DiscordController{dg})
+	bot := newBot(dg, &DiscordController{dg})
 
 	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages
 
@@ -79,13 +99,16 @@ func main() {
 		fmt.Println("Error opening Discord session: ", err)
 		return
 	}
+	defer dg.Close()
+
+	if err = bot.registerSlashCommands(); err != nil {
+		fmt.Printf("Couldn't register slash commands: %v", err)
+		return
+	}
 
 	// Wait here until CTRL-C or other term signal is received.
 	fmt.Println(APP_NAME + " is now running.  Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
-
-	// Cleanly close down the Discord session.
-	dg.Close()
 }

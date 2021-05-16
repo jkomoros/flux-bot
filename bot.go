@@ -44,7 +44,19 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 	s.AddHandler(result.messageCreate)
 	s.AddHandler(result.channelCreate)
 	s.AddHandler(result.channelUpdate)
+	s.AddHandler(result.interactionCreate)
 	return result
+}
+
+//registerSlashCommands must be called after the bot is already connected
+func (b *bot) registerSlashCommands() error {
+	for _, v := range commands {
+		_, err := b.session.ApplicationCommandCreate(b.session.State.User.ID, "", v)
+		if err != nil {
+			return fmt.Errorf("couldn't register command %v: %w", v.Name, err)
+		}
+	}
+	return nil
 }
 
 // discordgo callback: called when the bot receives the "ready" event from Discord.
@@ -109,6 +121,21 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 // single channel whose index changed will get called one at a time.
 func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate) {
 	b.setGuildNeedsInfoRegeneration(event.GuildID)
+}
+
+func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.InteractionCreate) {
+	switch event.Interaction.Data.Name {
+	case FORK_COMMAND_NAME:
+		b.createThreadInteraction(s, event)
+	default:
+		fmt.Println("Unknown interaction name: " + event.Interaction.Data.Name)
+	}
+
+}
+
+func (b *bot) createThreadInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {
+	//TODO: do something more substantive
+	fmt.Println("Received interaction: " + event.Interaction.Data.Name)
 }
 
 func (b *bot) setGuildNeedsInfoRegeneration(guildID string) {
