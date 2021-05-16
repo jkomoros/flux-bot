@@ -301,7 +301,7 @@ func (b *bot) moveThreadToTopOfCategory(thread *discordgo.Channel) error {
 		channel.Position = i
 	}
 
-	if err := b.session.GuildChannelsReorder(guild.ID, threads); err != nil {
+	if err := b.controller.GuildChannelsReorder(guild.ID, threads); err != nil {
 		return fmt.Errorf("couldn't reorder channels: %w", err)
 	}
 

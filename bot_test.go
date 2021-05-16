@@ -30,6 +30,7 @@ type TestController struct {
 	session                            *discordgo.Session
 	channelEditComplexCallCount        int
 	guildChannelCreateComplexCallCount int
+	guildChannelReorderCallCount       int
 }
 
 func (tc *TestController) GuildChannelCreateComplex(guildID string, data discordgo.GuildChannelCreateData) (st *discordgo.Channel, err error) {
@@ -46,6 +47,11 @@ func (tc *TestController) GuildChannelCreateComplex(guildID string, data discord
 func (tc *TestController) ChannelEditComplex(channelID string, data *discordgo.ChannelEdit) (st *discordgo.Channel, err error) {
 	tc.channelEditComplexCallCount++
 	return nil, nil
+}
+
+func (tc *TestController) GuildChannelsReorder(guildID string, channels []*discordgo.Channel) (err error) {
+	tc.guildChannelReorderCallCount++
+	return nil
 }
 
 func TestReady(t *testing.T) {
@@ -203,5 +209,69 @@ func TestGuildCreateTriggerCreatingArchivedCategory(t *testing.T) {
 	}
 	if controller.guildChannelCreateComplexCallCount != 1 {
 		t.Errorf("GuildChannelCreateComplex should have been called once.")
+	}
+}
+
+func TestMessageCreate(t *testing.T) {
+	session := newSessionStub()
+	maxActiveThreads = 1
+	controller := &TestController{}
+	controller.session = session
+	bot := newBot(session, controller)
+	guild := &discordgo.Guild{
+		ID: TEST_GUILD_ID,
+	}
+	guild.Channels = []*discordgo.Channel{
+		{
+			ID:      "thread-category",
+			Type:    discordgo.ChannelTypeGuildCategory,
+			Name:    THREAD_CATEGORY_NAME,
+			GuildID: TEST_GUILD_ID,
+		},
+		{
+			ID:       "channel-1",
+			Type:     discordgo.ChannelTypeGuildText,
+			Name:     "channel-1",
+			GuildID:  TEST_GUILD_ID,
+			ParentID: "thread-category",
+		},
+		{
+			ID:       "channel-2",
+			Type:     discordgo.ChannelTypeGuildText,
+			Name:     "channel-2",
+			GuildID:  TEST_GUILD_ID,
+			ParentID: "thread-category",
+		},
+	}
+	session.State.GuildAdd(guild)
+	bot.messageCreate(session, &discordgo.MessageCreate{
+		Message: &discordgo.Message{
+			ID:        "message-1",
+			ChannelID: "channel-2",
+			GuildID:   TEST_GUILD_ID,
+			// Content:          "",
+			// Timestamp:        "",
+			// EditedTimestamp:  "",
+			// MentionRoles:     []string{},
+			// TTS:              false,
+			// MentionEveryone:  false,
+			// Author:           &discordgo.User{},
+			// Attachments:      []*discordgo.MessageAttachment{},
+			// Embeds:           []*discordgo.MessageEmbed{},
+			// Mentions:         []*discordgo.User{},
+			// Reactions:        []*discordgo.MessageReactions{},
+			// Pinned:           false,
+			// Type:             0,
+			// WebhookID:        "",
+			// Member:           &discordgo.Member{},
+			// MentionChannels:  []*discordgo.Channel{},
+			// Activity:         &discordgo.MessageActivity{},
+			// Application:      &discordgo.MessageApplication{},
+			// MessageReference: &discordgo.MessageReference{},
+			// Flags:            0,
+		},
+	})
+	if controller.guildChannelReorderCallCount != 1 {
+		t.Errorf("ChannelEditComplex should have been called once.")
 	}
 }
