@@ -56,7 +56,7 @@ You can provide `debug-guild-id` option (or `DEBUG_GUILD_ID` env var) to registe
 
 The production bot is running in a `tmux` session on a Google Cloud VM running Ubuntu.
 
-1. Connect via SSH to the server. Run `go install -u github.com/jkomoros/gale-x-bot`
+1. Connect via SSH to the server. Run `go install github.com/jkomoros/gale-x-bot@latest`
 
 2. Open up the tmux session via `tmux attach`. 
 3. Kill the running one and then run the new one from the command history. 
