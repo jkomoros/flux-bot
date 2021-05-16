@@ -15,7 +15,7 @@ type TestController struct {
 	session                            *discordgo.Session
 	channelEditComplexCallCount        int
 	guildChannelCreateComplexCallCount int
-	guildChannelReorderCallCount       int
+	guildChannelsReorderCallCount      int
 }
 
 func (tc *TestController) GuildChannelCreateComplex(guildID string, data discordgo.GuildChannelCreateData) (st *discordgo.Channel, err error) {
@@ -35,7 +35,7 @@ func (tc *TestController) ChannelEditComplex(channelID string, data *discordgo.C
 }
 
 func (tc *TestController) GuildChannelsReorder(guildID string, channels []*discordgo.Channel) (err error) {
-	tc.guildChannelReorderCallCount++
+	tc.guildChannelsReorderCallCount++
 	return nil
 }
 
@@ -242,7 +242,107 @@ func TestMessageCreate(t *testing.T) {
 			GuildID:   TEST_GUILD_ID,
 		},
 	})
-	if controller.guildChannelReorderCallCount != 1 {
+	if controller.guildChannelsReorderCallCount != 1 {
+		t.Errorf("GuildChannelsReorder should have been called once.")
+	}
+}
+
+func TestChannelCreateSimple(t *testing.T) {
+	session, _ := discordgo.New(TEST_TOKEN)
+	maxActiveThreads = 2
+	controller := &TestController{}
+	controller.session = session
+	bot := newBot(session, controller)
+	guild := &discordgo.Guild{
+		ID: TEST_GUILD_ID,
+	}
+	newlyCreatedChannel := &discordgo.Channel{
+		ID:       "new-channel",
+		Type:     discordgo.ChannelTypeGuildText,
+		Name:     "New Channel",
+		GuildID:  TEST_GUILD_ID,
+		ParentID: "thread-category",
+	}
+	guild.Channels = []*discordgo.Channel{
+		{
+			ID:      "thread-category",
+			Type:    discordgo.ChannelTypeGuildCategory,
+			Name:    THREAD_CATEGORY_NAME,
+			GuildID: TEST_GUILD_ID,
+		},
+		{
+			ID:       "channel-1",
+			Type:     discordgo.ChannelTypeGuildText,
+			Name:     "channel-1",
+			GuildID:  TEST_GUILD_ID,
+			ParentID: "thread-category",
+		},
+		newlyCreatedChannel,
+	}
+	session.State.GuildAdd(guild)
+	bot.channelCreate(session, &discordgo.ChannelCreate{
+		Channel: newlyCreatedChannel,
+	})
+	if controller.channelEditComplexCallCount != 0 {
+		t.Errorf("ChannelEditComplex should not have been called.")
+	}
+	if controller.guildChannelCreateComplexCallCount != 0 {
+		t.Errorf("GuildChannelCreateComplex should not have been called.")
+	}
+	if controller.guildChannelsReorderCallCount != 1 {
+		t.Errorf("GuildChannelsReorder should have been called once.")
+	}
+}
+
+func TestChannelCreateArchive(t *testing.T) {
+	session, _ := discordgo.New(TEST_TOKEN)
+	maxActiveThreads = 1
+	controller := &TestController{}
+	controller.session = session
+	bot := newBot(session, controller)
+	guild := &discordgo.Guild{
+		ID: TEST_GUILD_ID,
+	}
+	guild.Roles = []*discordgo.Role{
+		{
+			ID:   "everyone-role",
+			Name: EVERYONE_ROLE_NAME,
+		},
+	}
+	newlyCreatedChannel := &discordgo.Channel{
+		ID:       "new-channel",
+		Type:     discordgo.ChannelTypeGuildText,
+		Name:     "New Channel",
+		GuildID:  TEST_GUILD_ID,
+		ParentID: "thread-category",
+	}
+	guild.Channels = []*discordgo.Channel{
+		{
+			ID:      "thread-category",
+			Type:    discordgo.ChannelTypeGuildCategory,
+			Name:    THREAD_CATEGORY_NAME,
+			GuildID: TEST_GUILD_ID,
+		},
+		{
+			ID:       "channel-1",
+			Type:     discordgo.ChannelTypeGuildText,
+			Name:     "channel-1",
+			GuildID:  TEST_GUILD_ID,
+			ParentID: "thread-category",
+		},
+		newlyCreatedChannel,
+	}
+	session.State.GuildAdd(guild)
+	bot.channelCreate(session, &discordgo.ChannelCreate{
+		Channel: newlyCreatedChannel,
+	})
+	if controller.channelEditComplexCallCount != 1 {
 		t.Errorf("ChannelEditComplex should have been called once.")
+	}
+	if controller.guildChannelCreateComplexCallCount != 1 {
+		t.Errorf("GuildChannelCreateComplex should have been called once.")
+	}
+	if controller.guildChannelsReorderCallCount != 1 {
+		t.Errorf("GuildChannelsReorder should have been called once.")
 	}
 }
