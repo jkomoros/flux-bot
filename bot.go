@@ -164,20 +164,25 @@ func (b *bot) getInfos(guildID string) categoryMap {
 	return currentInfos
 }
 
-func (b *bot) isThread(channel *discordgo.Channel) bool {
+//returns nil if not a thraed
+func (b *bot) getThreadGroupInfoForThread(channel *discordgo.Channel) *threadGroupInfo {
 	guildInfos := b.getInfos(channel.GuildID)
 	if guildInfos == nil {
 		//Must be a message from a server without a Threads category
-		return false
+		return nil
 	}
 	for _, group := range guildInfos {
 		if channel.ParentID == group.threadCategoryID {
 			//A message outside of Threads category
-			return true
+			return group
 		}
 	}
 	//Didn't match any of the infos
-	return false
+	return nil
+}
+
+func (b *bot) isThread(channel *discordgo.Channel) bool {
+	return b.getThreadGroupInfoForThread(channel) != nil
 }
 
 type categoryStruct struct {
