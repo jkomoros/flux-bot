@@ -34,7 +34,7 @@ You now must give your dev bot permission to join your dev Discord server.
 1. Copy your application ID. You can find it in the URL of the page you're looking at, something like `https://discord.com/developers/applications/837831972830576679/information` and use that.
 
 2. visit this URL (replacing the YOUR_APP_ID_HERE) with that app ID:
-`https://discord.com/api/oauth2/authorize?client_id=YOUR_APP_ID_HERE&scope=bot&permissions=268438544`
+https://discord.com/api/oauth2/authorize?client_id=YOUR_APPLICATION_ID_HERE&permissions=2415922192&scope=applications.commands%20bot
 
 Note that as this bot is developed, you might need to redo this connection if more permissions are ever required.
 
@@ -45,6 +45,12 @@ Now you need to get the secret token that allows you to authenticate as your bot
 1. Open up a terminal window, and run `export BOT_TOKEN=<PASTED-TOKEN>`. (You can also pass the token on each invocation of the command by using the `-t` parameter).
 
 3. Run the app by doing `go build && ./gale-x-bot` . It will connect to your dev server and print out debug information.
+
+## Hacking on application commands
+
+Slash commands that are installed globally take an hour to roll out. When developing that can be a pain.
+
+You can provide `debug-guild-id` option (or `DEBUG_GUILD_ID` env var) to register the command only to a specific debug guild during development.
 
 ## Updating the production bot
 

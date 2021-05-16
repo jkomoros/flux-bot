@@ -14,6 +14,7 @@ import (
 const APP_NAME = "gale-x-bot"
 const TOKEN_ENV_NAME = "BOT_TOKEN"
 const MAX_ACTIVE_THREADS_ENV_NAME = "BOT_MAX_THREADS"
+const DEBUG_GUILD_ID_ENV_NAME = "DEBUG_GUILD_ID"
 
 //The name of the category this will look for that contains things this should treat as threads
 const THREAD_CATEGORY_NAME = "Threads"
@@ -29,10 +30,24 @@ const EVERYONE_ROLE_NAME = "@everyone"
 
 var token string
 var maxActiveThreads int
+var debugGuildIDForCommand string
+
+const ARCHIVE_COMMAND_NAME = "archive"
+
+var (
+	//When creating a command also update bot.interactionCreate to dispatch to the handler for the interaction
+	commands = []*discordgo.ApplicationCommand{
+		{
+			Name:        ARCHIVE_COMMAND_NAME,
+			Description: "Archive the current thread forcibly (not waiting for it to fall off the end)",
+		},
+	}
+)
 
 func main() {
 	flag.StringVar(&token, "t", "", "Bot Token")
 	flag.IntVar(&maxActiveThreads, "n", -1, "Max number of threads per group")
+	flag.StringVar(&debugGuildIDForCommand, "debug-guild-id", "", "The guild ID to register commands with, useful during testing since global commands take an hour to roll out")
 	flag.Parse()
 
 	if token == "" {
@@ -61,6 +76,13 @@ func main() {
 		maxActiveThreads = DEFAULT_MAX_ACTIVE_THREADS
 	}
 
+	if debugGuildIDForCommand == "" {
+		debugGuildIDForCommand = os.Getenv(DEBUG_GUILD_ID_ENV_NAME)
+		if debugGuildIDForCommand != "" {
+			fmt.Println("Using " + DEBUG_GUILD_ID_ENV_NAME + " env var: " + debugGuildIDForCommand)
+		}
+	}
+
 	// Create a new Discord session using the provided bot token.
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
@@ -69,7 +91,7 @@ func main() {
 	}
 
 	// Register ready as a callback for the ready events.
-	newBot(dg, &DiscordController{dg})
+	bot := newBot(dg, &DiscordController{dg})
 
 	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages
 
@@ -79,13 +101,16 @@ func main() {
 		fmt.Println("Error opening Discord session: ", err)
 		return
 	}
+	defer dg.Close()
+
+	if err = bot.registerSlashCommands(); err != nil {
+		fmt.Printf("Couldn't register slash commands: %v", err)
+		return
+	}
 
 	// Wait here until CTRL-C or other term signal is received.
 	fmt.Println(APP_NAME + " is now running.  Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
-
-	// Cleanly close down the Discord session.
-	dg.Close()
 }

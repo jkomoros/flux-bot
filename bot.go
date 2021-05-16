@@ -44,7 +44,20 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 	s.AddHandler(result.messageCreate)
 	s.AddHandler(result.channelCreate)
 	s.AddHandler(result.channelUpdate)
+	s.AddHandler(result.interactionCreate)
 	return result
+}
+
+//registerSlashCommands must be called after the bot is already connected
+func (b *bot) registerSlashCommands() error {
+	for _, v := range commands {
+		//debugGuildIDForCommand will be "" (global) in the common case, only set during development.
+		_, err := b.session.ApplicationCommandCreate(b.session.State.User.ID, debugGuildIDForCommand, v)
+		if err != nil {
+			return fmt.Errorf("couldn't register command %v: %w", v.Name, err)
+		}
+	}
+	return nil
 }
 
 // discordgo callback: called when the bot receives the "ready" event from Discord.
@@ -111,6 +124,45 @@ func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate
 	b.setGuildNeedsInfoRegeneration(event.GuildID)
 }
 
+func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.InteractionCreate) {
+	//NOTE: all handlers must use s.InteractionRespond or the user will see an error.
+	switch event.Interaction.Data.Name {
+	case ARCHIVE_COMMAND_NAME:
+		b.archiveThreadInteraction(s, event)
+	default:
+		fmt.Println("Unknown interaction name: " + event.Interaction.Data.Name)
+	}
+}
+
+func (b *bot) archiveThreadInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {
+
+	channel, err := b.session.State.Channel(event.ChannelID)
+	if err != nil {
+		//TODO: respond to the interaction in the canonical way so it shows up in user's UI
+		fmt.Printf("Couldn't fetch channel %v: %v", event.ChannelID, err)
+		return
+	}
+	message := "Couldn't archive: "
+	gi := b.getThreadGroupInfoForThread(channel)
+	if gi != nil {
+		if err := gi.archiveThread(b.controller, s, channel); err != nil {
+			message += err.Error()
+			fmt.Println(message)
+		} else {
+			message = "Archived thread!"
+		}
+	} else {
+		message += "This channel is not a thread!"
+	}
+
+	s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionApplicationCommandResponseData{
+			Content: message,
+		},
+	})
+}
+
 func (b *bot) setGuildNeedsInfoRegeneration(guildID string) {
 	b.infoMutex.Lock()
 	delete(b.infos, guildID)
@@ -130,20 +182,25 @@ func (b *bot) getInfos(guildID string) categoryMap {
 	return currentInfos
 }
 
-func (b *bot) isThread(channel *discordgo.Channel) bool {
+//returns nil if not a thraed
+func (b *bot) getThreadGroupInfoForThread(channel *discordgo.Channel) *threadGroupInfo {
 	guildInfos := b.getInfos(channel.GuildID)
 	if guildInfos == nil {
 		//Must be a message from a server without a Threads category
-		return false
+		return nil
 	}
 	for _, group := range guildInfos {
 		if channel.ParentID == group.threadCategoryID {
 			//A message outside of Threads category
-			return true
+			return group
 		}
 	}
 	//Didn't match any of the infos
-	return false
+	return nil
+}
+
+func (b *bot) isThread(channel *discordgo.Channel) bool {
+	return b.getThreadGroupInfoForThread(channel) != nil
 }
 
 type categoryStruct struct {
