@@ -9,14 +9,7 @@ import (
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/jkomoros/gale-x-bot/discord"
 )
-
-func init() {
-	flag.StringVar(&token, "t", "", "Bot Token")
-	flag.IntVar(&maxActiveThreads, "n", -1, "Max number of threads per group")
-	flag.Parse()
-}
 
 const APP_NAME = "gale-x-bot"
 const TOKEN_ENV_NAME = "BOT_TOKEN"
@@ -38,6 +31,9 @@ var token string
 var maxActiveThreads int
 
 func main() {
+	flag.StringVar(&token, "t", "", "Bot Token")
+	flag.IntVar(&maxActiveThreads, "n", -1, "Max number of threads per group")
+	flag.Parse()
 
 	if token == "" {
 		token = os.Getenv(TOKEN_ENV_NAME)
@@ -73,8 +69,7 @@ func main() {
 	}
 
 	// Register ready as a callback for the ready events.
-	wrapper := discord.NewSessionWrapper(dg)
-	newBot(wrapper)
+	newBot(dg, &DiscordController{dg})
 
 	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages
 
