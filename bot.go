@@ -13,7 +13,8 @@ import (
 type categoryMap map[string]*threadGroupInfo
 
 type bot struct {
-	session *discordgo.Session
+	session    *discordgo.Session
+	controller Controller
 	//guildID -> threadCategoryChannelID -> info
 	infos     map[string]categoryMap
 	infoMutex sync.RWMutex
@@ -32,10 +33,11 @@ type byArchiveIndex []*discordgo.Channel
 //Sort in a similar way as the main discord client
 type byDiscordOrder []*discordgo.Channel
 
-func newBot(s *discordgo.Session) *bot {
+func newBot(s *discordgo.Session, c Controller) *bot {
 	result := &bot{
-		session: s,
-		infos:   make(map[string]categoryMap),
+		session:    s,
+		controller: c,
+		infos:      make(map[string]categoryMap),
 	}
 	s.AddHandler(result.ready)
 	s.AddHandler(result.guildCreate)
@@ -59,7 +61,7 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 		fmt.Printf("Couldn't find guild with ID %v", event.Guild.ID)
 	}
 	for _, group := range guildInfos {
-		if err := group.archiveThreadsIfNecessary(b.session); err != nil {
+		if err := group.archiveThreadsIfNecessary(b.controller, b.session); err != nil {
 			fmt.Printf("Couldn't archive extra threads on boot: %v", err)
 		}
 	}
@@ -97,7 +99,7 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 		return
 	}
 	for _, group := range guildInfos {
-		if err := group.archiveThreadsIfNecessary(b.session); err != nil {
+		if err := group.archiveThreadsIfNecessary(b.controller, b.session); err != nil {
 			fmt.Printf("Couldn't archive threads if necessary: %v", err)
 		}
 	}
@@ -347,7 +349,7 @@ func (b byDiscordOrder) Less(i, j int) bool {
 	return left.Position < right.Position
 }
 
-func (g *threadGroupInfo) archiveThreadsIfNecessary(session *discordgo.Session) error {
+func (g *threadGroupInfo) archiveThreadsIfNecessary(controller Controller, session *discordgo.Session) error {
 	category, err := session.State.Channel(g.threadCategoryID)
 	if err != nil {
 		return fmt.Errorf("archiveThreadsIfNecessary couldn't find category: %w", err)
@@ -359,8 +361,6 @@ func (g *threadGroupInfo) archiveThreadsIfNecessary(session *discordgo.Session) 
 
 	threads := threadsInCategory(guild, category)
 
-	fmt.Println("thread count", len(threads))
-
 	if len(threads) <= maxActiveThreads {
 		// Not necessary to remove any
 		return nil
@@ -370,7 +370,7 @@ func (g *threadGroupInfo) archiveThreadsIfNecessary(session *discordgo.Session) 
 
 	for i := 0; i < extraCount; i++ {
 		thread := threads[len(threads)-1-i]
-		if err := g.archiveThread(session, thread); err != nil {
+		if err := g.archiveThread(controller, session, thread); err != nil {
 			return fmt.Errorf("couldn't archive thread %v: %w", i, err)
 		}
 	}
@@ -378,7 +378,7 @@ func (g *threadGroupInfo) archiveThreadsIfNecessary(session *discordgo.Session) 
 	return nil
 }
 
-func (g *threadGroupInfo) archiveThread(session *discordgo.Session, thread *discordgo.Channel) error {
+func (g *threadGroupInfo) archiveThread(controller Controller, session *discordgo.Session, thread *discordgo.Channel) error {
 	fmt.Println("Archiving thread " + nameForThread(thread) + " to because it no longer fits")
 	var activeArchiveCategoryID = g.activeArchiveCategoryID
 	if activeArchiveCategoryID == "" {
@@ -422,7 +422,7 @@ func (g *threadGroupInfo) archiveThread(session *discordgo.Session, thread *disc
 		// Copy over the main categorie's permissions
 		extendedPermissions = append(extendedPermissions, mainCategory.PermissionOverwrites...)
 
-		archiveCategory, err := session.GuildChannelCreateComplex(thread.GuildID, discordgo.GuildChannelCreateData{
+		archiveCategory, err := controller.GuildChannelCreateComplex(thread.GuildID, discordgo.GuildChannelCreateData{
 			Name:                 name,
 			Type:                 discordgo.ChannelTypeGuildCategory,
 			PermissionOverwrites: extendedPermissions,
@@ -440,7 +440,7 @@ func (g *threadGroupInfo) archiveThread(session *discordgo.Session, thread *disc
 		return fmt.Errorf("couldn't fetch archiveCategory: %w", err)
 	}
 
-	_, err = session.ChannelEditComplex(thread.ID, &discordgo.ChannelEdit{
+	_, err = controller.ChannelEditComplex(thread.ID, &discordgo.ChannelEdit{
 		// This is a generally reasonable default, especially because by default
 		// there will very often only be one.
 		Position: 0,

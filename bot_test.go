@@ -25,15 +25,30 @@ func newGuildCreate(guild *discordgo.Guild) *discordgo.GuildCreate {
 	}
 }
 
+type TestController struct {
+	channelEditComplexCallCount        int
+	guildChannelCreateComplexCallCount int
+}
+
+func (tc *TestController) GuildChannelCreateComplex(guildID string, data discordgo.GuildChannelCreateData) (st *discordgo.Channel, err error) {
+	tc.guildChannelCreateComplexCallCount++
+	return nil, nil
+}
+func (tc *TestController) ChannelEditComplex(channelID string, data *discordgo.ChannelEdit) (st *discordgo.Channel, err error) {
+	tc.channelEditComplexCallCount++
+	return nil, nil
+}
+
 func TestReady(t *testing.T) {
 	session := newSessionStub()
-	bot := newBot(session)
+	bot := newBot(session, &TestController{})
 	bot.ready(session, newReadyEvent())
 }
 
 func TestGuildCreateSimple(t *testing.T) {
 	session := newSessionStub()
-	bot := newBot(session)
+	controller := &TestController{}
+	bot := newBot(session, controller)
 	guild := &discordgo.Guild{
 		ID: "guild-1",
 	}
@@ -54,11 +69,19 @@ func TestGuildCreateSimple(t *testing.T) {
 		}}
 	session.State.GuildAdd(guild)
 	bot.guildCreate(session, newGuildCreate((guild)))
+	if controller.channelEditComplexCallCount != 0 {
+		t.Errorf("ChannelEditComplex should not have been called.")
+	}
+	if controller.guildChannelCreateComplexCallCount != 0 {
+		t.Errorf("GuildChannelCreateComplex should not have been called.")
+	}
 }
 
 func TestGuildCreateTriggerArchive(t *testing.T) {
 	session := newSessionStub()
-	bot := newBot(session)
+	maxActiveThreads = 5
+	controller := &TestController{}
+	bot := newBot(session, controller)
 	guildID := "guild-1"
 	guild := &discordgo.Guild{
 		ID: guildID,
@@ -120,4 +143,10 @@ func TestGuildCreateTriggerArchive(t *testing.T) {
 		}}
 	session.State.GuildAdd(guild)
 	bot.guildCreate(session, newGuildCreate((guild)))
+	if controller.channelEditComplexCallCount != 1 {
+		t.Errorf("ChannelEditComplex should have been called once.")
+	}
+	if controller.guildChannelCreateComplexCallCount != 0 {
+		t.Errorf("GuildChannelCreateComplex should not have been called.")
+	}
 }

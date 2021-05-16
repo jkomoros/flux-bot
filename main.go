@@ -69,7 +69,7 @@ func main() {
 	}
 
 	// Register ready as a callback for the ready events.
-	newBot(dg)
+	newBot(dg, &DiscordController{dg})
 
 	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages
 
