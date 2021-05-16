@@ -125,6 +125,7 @@ func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate
 }
 
 func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.InteractionCreate) {
+	//NOTE: all handlers must use s.InteractionRespond or the user will see an error.
 	switch event.Interaction.Data.Name {
 	case FORK_COMMAND_NAME:
 		b.createThreadInteraction(s, event)
@@ -136,6 +137,12 @@ func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.Interacti
 func (b *bot) createThreadInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {
 	//TODO: do something more substantive
 	fmt.Println("Received interaction: " + event.Interaction.Data.Name)
+	s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionApplicationCommandResponseData{
+			Content: "Command received. TODO: do something",
+		},
+	})
 }
 
 func (b *bot) setGuildNeedsInfoRegeneration(guildID string) {
