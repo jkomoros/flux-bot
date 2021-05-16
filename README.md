@@ -34,7 +34,7 @@ You now must give your dev bot permission to join your dev Discord server.
 1. Copy your application ID. You can find it in the URL of the page you're looking at, something like `https://discord.com/developers/applications/837831972830576679/information` and use that.
 
 2. visit this URL (replacing the YOUR_APP_ID_HERE) with that app ID:
-`https://discord.com/api/oauth2/authorize?client_id=YOUR_APPLICATION_ID_HERE&permissions=268438544&scope=applications.commands%20bot`
+https://discord.com/api/oauth2/authorize?client_id=YOUR_APPLICATION_ID_HERE&permissions=2415922192&scope=applications.commands%20bot
 
 Note that as this bot is developed, you might need to redo this connection if more permissions are ever required.
 
