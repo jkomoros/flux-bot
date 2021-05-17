@@ -346,3 +346,17 @@ func TestChannelCreateArchive(t *testing.T) {
 		t.Errorf("GuildChannelsReorder should have been called once.")
 	}
 }
+
+func TestChannelUpdate(t *testing.T) {
+	session, _ := discordgo.New(TEST_TOKEN)
+	bot := newBot(session, nil)
+	bot.infos[TEST_GUILD_ID] = categoryMap{}
+	bot.channelUpdate(session, &discordgo.ChannelUpdate{
+		Channel: &discordgo.Channel{
+			GuildID: TEST_GUILD_ID,
+		},
+	})
+	if bot.infos[TEST_GUILD_ID] != nil {
+		t.Errorf("ChannelUpdate should have cleared cached state")
+	}
+}
