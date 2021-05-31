@@ -28,7 +28,6 @@ type MessageWordIndex struct {
 }
 
 func normalizeWord(input string) string {
-	//TODO: test this function
 	input = nonAlphaNumericRegExp.ReplaceAllString(input, "")
 	input = porter2.Stemmer.Stem(input)
 	return strings.ToLower(input)
@@ -63,7 +62,6 @@ func wordsForString(input string) []string {
 }
 
 func extractWordsFromContent(input string) []string {
-	//TODO: test this function
 	//normalize all spaces to just a single space
 	input = spaceRegExp.ReplaceAllString(input, " ")
 	input = removeMentionsAndURLS(input)

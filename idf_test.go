@@ -41,7 +41,26 @@ func TestExtractWordsFromContent(t *testing.T) {
 			"foo <#837826557477126219> foo",
 			"foo foo",
 		},
-		//TODO: many more tests, including exercising all things covered by a TODO in idf.go
+		{
+			"Dashes as spaces",
+			"foo-bar foo",
+			"foo bar foo",
+		},
+		{
+			"Slashes as spaces",
+			"foo/bar foo",
+			"foo bar foo",
+		},
+		{
+			"Punctuation stripped",
+			"foo & (foo)!",
+			"foo foo",
+		},
+		{
+			"Stemming",
+			"procrastination",
+			"procrastin",
+		},
 	}
 
 	for i, test := range tests {
