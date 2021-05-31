@@ -61,6 +61,11 @@ func TestExtractWordsFromContent(t *testing.T) {
 			"procrastination",
 			"procrastin",
 		},
+		{
+			"Markdown",
+			"foo **bar baz** _zing_",
+			"foo bar baz zing",
+		},
 	}
 
 	for i, test := range tests {
