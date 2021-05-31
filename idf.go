@@ -155,6 +155,7 @@ func (i *IDFIndex) MessageWordIndex(messageID string) *MessageWordIndex {
 
 //ProcessMessage will process a given message and update the index.
 func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
+	//TODO: test this
 	if message == nil {
 		return
 	}
