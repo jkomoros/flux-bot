@@ -115,6 +115,10 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	if message == nil {
 		return
 	}
+	//Skip messages that are not from users
+	if message.Type != discordgo.MessageTypeDefault && message.Type != discordgo.MessageTypeReply {
+		return
+	}
 	//Signal this needs to be reprocessed
 	i.idf = nil
 	i.messages[message.ID] = newMessageWordIndex(i, message)
