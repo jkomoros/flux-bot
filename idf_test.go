@@ -31,6 +31,16 @@ func TestExtractWordsFromContent(t *testing.T) {
 			"foo https://www.example.com/foo/?foo=foo foo",
 			"foo foo",
 		},
+		{
+			"Person mentions stripped",
+			"foo <@!837476904742289429> foo",
+			"foo foo",
+		},
+		{
+			"Channel mentions stripped",
+			"foo <#837826557477126219> foo",
+			"foo foo",
+		},
 		//TODO: many more tests, including exercising all things covered by a TODO in idf.go
 	}
 
