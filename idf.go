@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/dchest/stemmer/porter2"
 )
 
 var (
@@ -28,8 +29,8 @@ type MessageWordIndex struct {
 
 func normalizeWord(input string) string {
 	//TODO: test this function
-	//TODO: stem
 	input = nonAlphaNumericRegExp.ReplaceAllString(input, "")
+	input = porter2.Stemmer.Stem(input)
 	return strings.ToLower(input)
 }
 
