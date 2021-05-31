@@ -2,10 +2,17 @@ package main
 
 import (
 	"math"
+	"regexp"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
+
+var spaceRegExp *regexp.Regexp
+
+func init() {
+	spaceRegExp = regexp.MustCompile(`\s+`)
+}
 
 type MessageWordIndex struct {
 	//The Index this is part of
@@ -18,17 +25,50 @@ type MessageWordIndex struct {
 func normalizeWord(input string) string {
 	//TODO: test this function
 	//TODO: stem
+	//TODO: strip out punctuation
 	return strings.ToLower(input)
+}
+
+func removeMentionsAndURLS(input string) string {
+	//TODO: test this function
+	pieces := strings.Split(input, " ")
+	var result []string
+	for _, piece := range pieces {
+		piece = strings.ToLower(piece)
+		if strings.HasPrefix(piece, "https://") {
+			continue
+		}
+		if strings.HasPrefix(piece, "http://") {
+			continue
+		}
+		//Channel mentions look like <#837826557477126219>
+		//User mentions look like <@!837476904742289429>
+		if strings.HasPrefix(piece, "<") && strings.HasSuffix(piece, ">") {
+			continue
+		}
+		result = append(result, piece)
+	}
+	return strings.Join(pieces, " ")
+}
+
+func wordsForString(input string) []string {
+	input = strings.ReplaceAll(input, "-", " ")
+	input = strings.ReplaceAll(input, "/", " ")
+	return strings.Split(input, " ")
 }
 
 func extractWordsFromContent(input string) []string {
 	//TODO: test this function
-	//TODO: strip out mentions, URLs, etc
-	//TODO: much better normalization of text, especially for non-alphanumeric
-	words := strings.Split(input, " ")
-	result := make([]string, len(words))
-	for i, word := range words {
-		result[i] = normalizeWord(word)
+	//normalize all spaces to just a single space
+	input = spaceRegExp.ReplaceAllString(input, " ")
+	input = removeMentionsAndURLS(input)
+	var result []string
+	for _, word := range wordsForString(input) {
+		word := normalizeWord(word)
+		if word == "" {
+			continue
+		}
+		result = append(result, word)
 	}
 	return result
 }
