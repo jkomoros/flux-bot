@@ -8,10 +8,14 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-var spaceRegExp *regexp.Regexp
+var (
+	spaceRegExp           *regexp.Regexp
+	nonAlphaNumericRegExp *regexp.Regexp
+)
 
 func init() {
 	spaceRegExp = regexp.MustCompile(`\s+`)
+	nonAlphaNumericRegExp = regexp.MustCompile("[^a-zA-Z0-9]+")
 }
 
 type MessageWordIndex struct {
@@ -25,7 +29,7 @@ type MessageWordIndex struct {
 func normalizeWord(input string) string {
 	//TODO: test this function
 	//TODO: stem
-	//TODO: strip out punctuation
+	input = nonAlphaNumericRegExp.ReplaceAllString(input, "")
 	return strings.ToLower(input)
 }
 
