@@ -36,6 +36,7 @@ func normalizeWord(input string) string {
 
 func removeMentionsAndURLS(input string) string {
 	//TODO: test this function
+	//TODO: strip out markdown
 	pieces := strings.Split(input, " ")
 	var result []string
 	for _, piece := range pieces {
