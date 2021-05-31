@@ -16,6 +16,21 @@ func TestExtractWordsFromContent(t *testing.T) {
 			"noop test",
 			"noop test",
 		},
+		{
+			"Multiple types of whitespace",
+			"foo	foo\n foo foo",
+			"foo foo foo foo",
+		},
+		{
+			"Lowercase",
+			"LoWERcase",
+			"lowercas",
+		},
+		{
+			"URLs stripped",
+			"foo https://www.example.com/foo/?foo=foo foo",
+			"foo foo",
+		},
 		//TODO: many more tests, including exercising all things covered by a TODO in idf.go
 	}
 
