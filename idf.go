@@ -54,7 +54,7 @@ func removeMentionsAndURLS(input string) string {
 		}
 		result = append(result, piece)
 	}
-	return strings.Join(pieces, " ")
+	return strings.Join(result, " ")
 }
 
 func wordsForString(input string) []string {
