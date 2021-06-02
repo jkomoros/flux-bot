@@ -113,6 +113,7 @@ func TestProcessMessage(t *testing.T) {
 	}
 	idf := index.IDF()
 	assert.For(t).ThatActual(idf).Equals(expectedIDF).ThenDiffOnFail()
+
 	messageIndex := index.MessageWordIndex("Message 1")
 	assert.For(t).ThatActual(messageIndex).IsNotNil()
 	tfidf := messageIndex.TFIDF()
@@ -126,5 +127,19 @@ func TestProcessMessage(t *testing.T) {
 		"the":        -0.12493873660829993,
 	}
 	assert.For(t).ThatActual(tfidf).Equals(expectedTFIDF)
+
+	expectedChannelTFIDF := map[string]float64{
+		"a":          -0.8745711562580994,
+		"bar":        0,
+		"baz":        0,
+		"blarg":      0.17609125905568124,
+		"diamond":    0.17609125905568124,
+		"foo":        0,
+		"is":         -0.7496324196497995,
+		"procrastin": 0,
+		"rare":       0.17609125905568124,
+		"the":        -1.1244486294746994,
+	}
+	assert.For(t).ThatActual(index.ChannelTFIDF("DefaultChannel")).Equals(expectedChannelTFIDF)
 
 }

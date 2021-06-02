@@ -186,3 +186,14 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	}
 	i.messages[message.ChannelID][message.ID] = newMessageWordIndex(i, message)
 }
+
+//Computes a TFIDF sum for all messages in the given channel
+func (i *IDFIndex) ChannelTFIDF(channelID string) map[string]float64 {
+	result := make(map[string]float64)
+	for _, message := range i.messages[channelID] {
+		for key, val := range message.TFIDF() {
+			result[key] += val
+		}
+	}
+	return result
+}
