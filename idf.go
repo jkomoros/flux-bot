@@ -99,14 +99,17 @@ func (m *MessageWordIndex) WordCount() int {
 //IDFIndex stores information for calculating IDF of a thread. Get a new one
 //from NewIDFIndex.
 type IDFIndex struct {
-	//messageID --> *MessageWordIndex
-	messages map[string]*MessageWordIndex
-	idf      map[string]float64
+	//channelID --> messageID --> *MessageWordIndex
+	messages map[string]map[string]*MessageWordIndex
+	//map of messageID to the channel it's in in the above
+	channelIDForMessage map[string]string
+	idf                 map[string]float64
 }
 
 func NewIDFIndex() *IDFIndex {
 	return &IDFIndex{
-		messages: make(map[string]*MessageWordIndex),
+		messages:            make(map[string]map[string]*MessageWordIndex),
+		channelIDForMessage: make(map[string]string),
 		//deliberately don't set idf, to signal it needs to be rebuilt.
 	}
 }
@@ -128,9 +131,11 @@ func (i *IDFIndex) IDF() map[string]float64 {
 func (i *IDFIndex) rebuildIDF() {
 	//for each word, the number of messages that contain the word at least once.
 	corpusWords := make(map[string]int)
-	for _, messageIndex := range i.messages {
-		for word := range messageIndex.WordCounts {
-			corpusWords[word] += 1
+	for _, channelCollection := range i.messages {
+		for _, messageIndex := range channelCollection {
+			for word := range messageIndex.WordCounts {
+				corpusWords[word] += 1
+			}
 		}
 	}
 	idf := make(map[string]float64)
@@ -150,7 +155,8 @@ func (i *IDFIndex) DocumentCount() int {
 }
 
 func (i *IDFIndex) MessageWordIndex(messageID string) *MessageWordIndex {
-	return i.messages[messageID]
+	channelID := i.channelIDForMessage[messageID]
+	return i.messages[channelID][messageID]
 }
 
 //ProcessMessage will process a given message and update the index.
@@ -165,5 +171,9 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	}
 	//Signal this needs to be reprocessed
 	i.idf = nil
-	i.messages[message.ID] = newMessageWordIndex(i, message)
+	i.channelIDForMessage[message.ID] = message.ChannelID
+	if _, ok := i.messages[message.ChannelID]; !ok {
+		i.messages[message.ChannelID] = make(map[string]*MessageWordIndex)
+	}
+	i.messages[message.ChannelID][message.ID] = newMessageWordIndex(i, message)
 }
