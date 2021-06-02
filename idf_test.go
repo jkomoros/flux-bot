@@ -129,13 +129,13 @@ func TestProcessMessage(t *testing.T) {
 	assert.For(t).ThatActual(tfidf).Equals(expectedTFIDF)
 
 	expectedChannelTFIDF := map[string]float64{
-		"a":          -0.8745711562580994,
+		"a":          -0.8745711562580996,
 		"bar":        0,
 		"baz":        0,
 		"blarg":      0.17609125905568124,
 		"diamond":    0.17609125905568124,
 		"foo":        0,
-		"is":         -0.7496324196497995,
+		"is":         -0.7496324196497997,
 		"procrastin": 0,
 		"rare":       0.17609125905568124,
 		"the":        -1.1244486294746994,
