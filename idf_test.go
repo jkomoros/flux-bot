@@ -1,8 +1,12 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/workfit/tester/assert"
 )
 
 func TestExtractWordsFromContent(t *testing.T) {
@@ -74,4 +78,40 @@ func TestExtractWordsFromContent(t *testing.T) {
 			t.Errorf("Test %v %v : %v did not equal %v", i, test.Description, result, test.Expected)
 		}
 	}
+}
+
+func TestProcessMessage(t *testing.T) {
+	inputs := []string{
+		"the the the foo bar baz is a procrastinate",
+		"procrastination Procrastinate blarg baz the a is diamond",
+		"is is is a a a a is a the the the the the foo bar rare",
+	}
+	//TODO: are these really reasonable values for those inputs?
+	expected := map[string]float64{
+		"a":          -0.12493873660829993,
+		"bar":        0,
+		"baz":        0,
+		"blarg":      0.17609125905568124,
+		"diamond":    0.17609125905568124,
+		"foo":        0,
+		"is":         -0.12493873660829993,
+		"procrastin": 0,
+		"rare":       0.17609125905568124,
+		"the":        -0.12493873660829993,
+	}
+	index := NewIDFIndex()
+	for i, message := range inputs {
+		index.ProcessMessage(&discordgo.Message{
+			Type:      discordgo.MessageTypeDefault,
+			Content:   message,
+			ID:        "Message " + strconv.Itoa(i),
+			ChannelID: "DefaultChannel",
+		})
+	}
+	if index.DocumentCount() != len(inputs) {
+		t.Errorf("Incorrect number of messages. Got %v, expected %v", index.DocumentCount(), len(inputs))
+	}
+	idf := index.IDF()
+	assert.For(t).ThatActual(idf).Equals(expected).ThenDiffOnFail()
+
 }
