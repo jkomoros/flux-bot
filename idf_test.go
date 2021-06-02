@@ -87,7 +87,7 @@ func TestProcessMessage(t *testing.T) {
 		"is is is a a a a is a the the the the the foo bar rare",
 	}
 	//TODO: are these really reasonable values for those inputs?
-	expected := map[string]float64{
+	expectedIDF := map[string]float64{
 		"a":          -0.12493873660829993,
 		"bar":        0,
 		"baz":        0,
@@ -112,6 +112,19 @@ func TestProcessMessage(t *testing.T) {
 		t.Errorf("Incorrect number of messages. Got %v, expected %v", index.DocumentCount(), len(inputs))
 	}
 	idf := index.IDF()
-	assert.For(t).ThatActual(idf).Equals(expected).ThenDiffOnFail()
+	assert.For(t).ThatActual(idf).Equals(expectedIDF).ThenDiffOnFail()
+	messageIndex := index.MessageWordIndex("Message 1")
+	assert.For(t).ThatActual(messageIndex).IsNotNil()
+	tfidf := messageIndex.TFIDF()
+	expectedTFIDF := map[string]float64{
+		"a":          -0.12493873660829993,
+		"baz":        0,
+		"blarg":      0.17609125905568124,
+		"diamond":    0.17609125905568124,
+		"is":         -0.12493873660829993,
+		"procrastin": 0,
+		"the":        -0.12493873660829993,
+	}
+	assert.For(t).ThatActual(tfidf).Equals(expectedTFIDF)
 
 }

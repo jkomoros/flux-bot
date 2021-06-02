@@ -27,6 +27,15 @@ type MessageWordIndex struct {
 	WordCounts map[string]int
 }
 
+func (m *MessageWordIndex) TFIDF() map[string]float64 {
+	result := make(map[string]float64)
+	idf := m.Index.IDF()
+	for word, count := range m.WordCounts {
+		result[word] = idf[word] * float64(count)
+	}
+	return result
+}
+
 func normalizeWord(input string) string {
 	input = nonAlphaNumericRegExp.ReplaceAllString(input, "")
 	input = porter2.Stemmer.Stem(input)
