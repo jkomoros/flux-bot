@@ -151,7 +151,7 @@ func (i *IDFIndex) rebuildIDF() {
 }
 
 func (i *IDFIndex) DocumentCount() int {
-	return len(i.messages)
+	return len(i.channelIDForMessage)
 }
 
 func (i *IDFIndex) MessageWordIndex(messageID string) *MessageWordIndex {
