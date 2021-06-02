@@ -18,6 +18,7 @@ type bot struct {
 	//guildID -> threadCategoryChannelID -> info
 	infos     map[string]categoryMap
 	infoMutex sync.RWMutex
+	idf       *IDFIndex
 }
 
 type threadGroupInfo struct {
@@ -38,6 +39,7 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 		session:    s,
 		controller: c,
 		infos:      make(map[string]categoryMap),
+		idf:        NewIDFIndex(),
 	}
 	s.AddHandler(result.ready)
 	s.AddHandler(result.guildCreate)
@@ -82,6 +84,7 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 
 // discordgo callback: called after the when new message is posted.
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
+	b.idf.ProcessMessage(event.Message)
 	channel, err := s.State.Channel(event.ChannelID)
 	if err != nil {
 		fmt.Println("Couldn't find channel")
