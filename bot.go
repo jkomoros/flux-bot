@@ -18,7 +18,7 @@ type bot struct {
 	//guildID -> threadCategoryChannelID -> info
 	infos     map[string]categoryMap
 	infoMutex sync.RWMutex
-	idf       *IDFIndex
+	idfs      map[string]*IDFIndex
 }
 
 type threadGroupInfo struct {
@@ -39,7 +39,7 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 		session:    s,
 		controller: c,
 		infos:      make(map[string]categoryMap),
-		idf:        NewIDFIndex(),
+		idfs:       make(map[string]*IDFIndex),
 	}
 	s.AddHandler(result.ready)
 	s.AddHandler(result.guildCreate)
@@ -80,11 +80,16 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 			fmt.Printf("Couldn't archive extra threads on boot: %v", err)
 		}
 	}
+	if err := b.rebuildIDFForGuild(event.Guild.ID); err != nil {
+		fmt.Printf("Couldn't create IDF for guild: %v", err)
+	}
 }
 
 // discordgo callback: called after the when new message is posted.
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
-	b.idf.ProcessMessage(event.Message)
+	if idf := b.idfs[event.GuildID]; idf != nil {
+		idf.ProcessMessage(event.Message)
+	}
 	channel, err := s.State.Channel(event.ChannelID)
 	if err != nil {
 		fmt.Println("Couldn't find channel")
@@ -164,6 +169,61 @@ func (b *bot) archiveThreadInteraction(s *discordgo.Session, event *discordgo.In
 			Content: message,
 		},
 	})
+}
+
+func (b *bot) rebuildIDFForGuild(guildID string) error {
+	guild, err := b.session.State.Guild(guildID)
+	if err != nil {
+		return fmt.Errorf("couldn't get guild %v: %w", guildID, err)
+	}
+	fmt.Printf("Rebuilding IDF for Guild %v(%v)\n", guild.Name, guild.ID)
+	b.idfs[guildID] = NewIDFIndex()
+	for _, channel := range guild.Channels {
+		if err := b.rebuildIDFForChannel(channel); err != nil {
+			return fmt.Errorf("couldn't process channel %v: %w", channel.ID, err)
+		}
+	}
+	fmt.Printf("Done rebuilding IDF for Guild %v(%v)\n", guild.Name, guild.ID)
+	return nil
+}
+
+//This is the max limit in the discord API. Otherwise it defaults to 0
+const MESSAGES_TO_FETCH = 100
+
+func (b *bot) rebuildIDFForChannel(channel *discordgo.Channel) error {
+	//TODO: test this function
+	if channel.Type != discordgo.ChannelTypeGuildText {
+		return nil
+	}
+	idf := b.idfs[channel.GuildID]
+	fmt.Printf("Fetching messages for IDF for %v (%v)\n", channel.Name, channel.ID)
+	message, err := b.controller.ChannelMessage(channel.ID, channel.LastMessageID)
+	if err == nil {
+		//It's OK for there to be an error--some channels don't have a starter message anyway
+		idf.ProcessMessage(message)
+	}
+	lastMessageID := channel.LastMessageID
+	continueFetching := true
+	for continueFetching {
+		fmt.Println("Fetching a batch of messages before " + lastMessageID)
+		messages, err := b.controller.ChannelMessages(channel.ID, MESSAGES_TO_FETCH, lastMessageID, "", "")
+		if err != nil {
+			return fmt.Errorf("couldn't fetch messages around %v: %w", lastMessageID, err)
+		}
+		if len(messages) == 0 {
+			break
+		}
+		if len(messages) < MESSAGES_TO_FETCH {
+			//This must have been the last batch to fetch
+			continueFetching = false
+		}
+		for _, message := range messages {
+			idf.ProcessMessage(message)
+		}
+		//TODO: this is assuming the messages are returned with earlier ones first.
+		lastMessageID = messages[len(messages)-1].ID
+	}
+	return nil
 }
 
 func (b *bot) setGuildNeedsInfoRegeneration(guildID string) {
