@@ -200,6 +200,8 @@ func (b *bot) rebuildIDFForChannel(channel *discordgo.Channel) error {
 	if channel.Type != discordgo.ChannelTypeGuildText {
 		return nil
 	}
+	//We'll walk backwards, starting at lastMessageID, and fetching batches of
+	//messages backwards until we run out.
 	idf := b.idfs[channel.GuildID]
 	fmt.Printf("Fetching messages for IDF for %v (%v)\n", channel.Name, channel.ID)
 	message, err := b.controller.ChannelMessage(channel.ID, channel.LastMessageID)
@@ -226,7 +228,7 @@ func (b *bot) rebuildIDFForChannel(channel *discordgo.Channel) error {
 		for _, message := range messages {
 			idf.ProcessMessage(message)
 		}
-		//TODO: this is assuming the messages are returned with earlier ones first.
+		//Messages are sorted with most recent first and least recent last.
 		lastMessageID = messages[len(messages)-1].ID
 	}
 	return nil
