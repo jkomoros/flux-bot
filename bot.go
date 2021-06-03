@@ -211,6 +211,7 @@ func (b *bot) rebuildIDFForChannel(channel *discordgo.Channel) error {
 	continueFetching := true
 	for continueFetching {
 		fmt.Println("Fetching a batch of messages before " + lastMessageID)
+		//lastMessageID will be excluded
 		messages, err := b.controller.ChannelMessages(channel.ID, MESSAGES_TO_FETCH, lastMessageID, "", "")
 		if err != nil {
 			return fmt.Errorf("couldn't fetch messages around %v: %w", lastMessageID, err)
