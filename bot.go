@@ -80,8 +80,13 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 			fmt.Printf("Couldn't archive extra threads on boot: %v", err)
 		}
 	}
-	if err := b.rebuildIDFForGuild(event.Guild.ID); err != nil {
-		fmt.Printf("Couldn't create IDF for guild: %v", err)
+	if idf := LoadIDFIndex(event.Guild.ID); idf != nil {
+		fmt.Printf("Reloading guild IDF cachce for %v(%v)\n", event.Guild.Name, event.Guild.ID)
+		b.idfs[event.Guild.ID] = idf
+	} else {
+		if err := b.rebuildIDFForGuild(event.Guild.ID); err != nil {
+			fmt.Printf("Couldn't create IDF for guild: %v\n", err)
+		}
 	}
 }
 

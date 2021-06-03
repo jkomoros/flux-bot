@@ -19,6 +19,11 @@ var (
 	nonAlphaNumericRegExp *regexp.Regexp
 )
 
+const (
+	CACHE_PATH     = ".cache"
+	IDF_CACHE_PATH = "idf"
+)
+
 func init() {
 	spaceRegExp = regexp.MustCompile(`\s+`)
 	nonAlphaNumericRegExp = regexp.MustCompile("[^a-zA-Z0-9]+")
@@ -111,6 +116,25 @@ type IDFIndex struct {
 	idf                map[string]float64
 }
 
+func LoadIDFIndex(guildID string) *IDFIndex {
+	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
+	path := filepath.Join(folderPath, guildID+".json")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
+	blob, err := ioutil.ReadFile(path)
+	if err != nil {
+		fmt.Printf("couldn't read json file for %v: %v", guildID, err)
+		return nil
+	}
+	var result IDFIndex
+	if err := json.Unmarshal(blob, &result); err != nil {
+		fmt.Printf("couldn't unmarshal json for %v: %v", guildID, err)
+		return nil
+	}
+	return &result
+}
+
 func NewIDFIndex() *IDFIndex {
 	return &IDFIndex{
 		Messages:           make(map[string]*MessageWordIndex),
@@ -118,9 +142,6 @@ func NewIDFIndex() *IDFIndex {
 		//deliberately don't set idf, to signal it needs to be rebuilt.
 	}
 }
-
-const CACHE_PATH = ".cache"
-const IDF_CACHE_PATH = "idf"
 
 //Persist persists the cache to disk. Load it back up later with guildID.
 func (i *IDFIndex) Persist(guildID string) error {
