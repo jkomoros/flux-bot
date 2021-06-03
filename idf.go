@@ -1,7 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"math"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -112,6 +117,25 @@ func NewIDFIndex() *IDFIndex {
 		MessagesForChannel: make(map[string]map[string]bool),
 		//deliberately don't set idf, to signal it needs to be rebuilt.
 	}
+}
+
+const CACHE_PATH = ".cache"
+const IDF_CACHE_PATH = "idf"
+
+//Persist persists the cache to disk. Load it back up later with guildID.
+func (i *IDFIndex) Persist(guildID string) error {
+	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
+	path := filepath.Join(folderPath, guildID+".json")
+	blob, err := json.MarshalIndent(i, "", "\t")
+	if err != nil {
+		return fmt.Errorf("couldnt format json: %w", err)
+	}
+	if _, err := os.Stat(folderPath); os.IsNotExist(err) {
+		if err := os.MkdirAll(folderPath, 0700); err != nil {
+			return fmt.Errorf("couldn't create cache folder: %w", err)
+		}
+	}
+	return ioutil.WriteFile(path, blob, 0644)
 }
 
 //Returns the Inverse Document Frequencey for the word in the corpus. Word may
