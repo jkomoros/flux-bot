@@ -113,4 +113,6 @@ func main() {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
+	//Tell the bot to clean itself up including persisting state
+	bot.Close()
 }
