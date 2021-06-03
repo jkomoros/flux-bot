@@ -116,7 +116,7 @@ func TestProcessMessage(t *testing.T) {
 
 	messageIndex := index.MessageWordIndex("Message 1")
 	assert.For(t).ThatActual(messageIndex).IsNotNil()
-	tfidf := messageIndex.TFIDF()
+	tfidf := messageIndex.TFIDF(index)
 	expectedTFIDF := map[string]float64{
 		"a":          -0.12493873660829993,
 		"baz":        0,

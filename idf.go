@@ -20,16 +20,13 @@ func init() {
 }
 
 type MessageWordIndex struct {
-	//The Index this is part of
-	Index     *IDFIndex
-	wordCount int
 	//stemmed word -> wordCount
-	WordCounts map[string]int
+	WordCounts map[string]int `json:"wordCounts"`
 }
 
-func (m *MessageWordIndex) TFIDF() map[string]float64 {
+func (m *MessageWordIndex) TFIDF(index *IDFIndex) map[string]float64 {
 	result := make(map[string]float64)
-	idf := m.Index.IDF()
+	idf := index.IDF()
 	for word, count := range m.WordCounts {
 		result[word] = idf[word] * float64(count)
 	}
@@ -85,7 +82,7 @@ func extractWordsFromContent(input string) []string {
 	return result
 }
 
-func newMessageWordIndex(parent *IDFIndex, message *discordgo.Message) *MessageWordIndex {
+func newMessageWordIndex(message *discordgo.Message) *MessageWordIndex {
 	wc := make(map[string]int)
 
 	words := extractWordsFromContent(message.Content)
@@ -95,30 +92,24 @@ func newMessageWordIndex(parent *IDFIndex, message *discordgo.Message) *MessageW
 	}
 
 	return &MessageWordIndex{
-		Index:      parent,
-		wordCount:  len(words),
 		WordCounts: wc,
 	}
-}
-
-func (m *MessageWordIndex) WordCount() int {
-	return m.wordCount
 }
 
 //IDFIndex stores information for calculating IDF of a thread. Get a new one
 //from NewIDFIndex.
 type IDFIndex struct {
 	//messageID --> *MessageWordIndex
-	messages map[string]*MessageWordIndex
+	Messages map[string]*MessageWordIndex `json:"messages"`
 	//channelID --> set of messageID
-	messagesForChannel map[string]map[string]bool
+	MessagesForChannel map[string]map[string]bool `json:"messageForChannel"`
 	idf                map[string]float64
 }
 
 func NewIDFIndex() *IDFIndex {
 	return &IDFIndex{
-		messages:           make(map[string]*MessageWordIndex),
-		messagesForChannel: make(map[string]map[string]bool),
+		Messages:           make(map[string]*MessageWordIndex),
+		MessagesForChannel: make(map[string]map[string]bool),
 		//deliberately don't set idf, to signal it needs to be rebuilt.
 	}
 }
@@ -140,7 +131,7 @@ func (i *IDFIndex) IDF() map[string]float64 {
 func (i *IDFIndex) rebuildIDF() {
 	//for each word, the number of messages that contain the word at least once.
 	corpusWords := make(map[string]int)
-	for _, messageIndex := range i.messages {
+	for _, messageIndex := range i.Messages {
 		for word := range messageIndex.WordCounts {
 			corpusWords[word] += 1
 		}
@@ -158,11 +149,11 @@ func (i *IDFIndex) rebuildIDF() {
 }
 
 func (i *IDFIndex) DocumentCount() int {
-	return len(i.messages)
+	return len(i.Messages)
 }
 
 func (i *IDFIndex) MessageWordIndex(messageID string) *MessageWordIndex {
-	return i.messages[messageID]
+	return i.Messages[messageID]
 }
 
 //ProcessMessage will process a given message and update the index.
@@ -177,19 +168,19 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	}
 	//Signal this needs to be reprocessed
 	i.idf = nil
-	i.messages[message.ID] = newMessageWordIndex(i, message)
-	if _, ok := i.messagesForChannel[message.ChannelID]; !ok {
-		i.messagesForChannel[message.ChannelID] = make(map[string]bool)
+	i.Messages[message.ID] = newMessageWordIndex(message)
+	if _, ok := i.MessagesForChannel[message.ChannelID]; !ok {
+		i.MessagesForChannel[message.ChannelID] = make(map[string]bool)
 	}
-	i.messagesForChannel[message.ChannelID][message.ID] = true
+	i.MessagesForChannel[message.ChannelID][message.ID] = true
 }
 
 //Computes a TFIDF sum for all messages in the given channel
 func (i *IDFIndex) ChannelTFIDF(channelID string) map[string]float64 {
 	result := make(map[string]float64)
-	for messageID := range i.messagesForChannel[channelID] {
-		message := i.messages[messageID]
-		for key, val := range message.TFIDF() {
+	for messageID := range i.MessagesForChannel[channelID] {
+		message := i.Messages[messageID]
+		for key, val := range message.TFIDF(i) {
 			result[key] += val
 		}
 	}
