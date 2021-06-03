@@ -24,6 +24,10 @@ const (
 	IDF_CACHE_PATH = "idf"
 )
 
+//This number should be incremetned every time the format of the JSON cache
+//changes, so old caches will be discarded.
+const IDF_JSON_FORMAT_VERSION = 1
+
 func init() {
 	spaceRegExp = regexp.MustCompile(`\s+`)
 	nonAlphaNumericRegExp = regexp.MustCompile("[^a-zA-Z0-9]+")
@@ -113,6 +117,7 @@ type IDFIndex struct {
 	Messages map[string]*MessageWordIndex `json:"messages"`
 	//channelID --> set of messageID
 	MessagesForChannel map[string]map[string]bool `json:"messageForChannel"`
+	FormatVersion      int                        `json:"formatVersion"`
 	idf                map[string]float64
 }
 
@@ -132,6 +137,10 @@ func LoadIDFIndex(guildID string) *IDFIndex {
 		fmt.Printf("couldn't unmarshal json for %v: %v", guildID, err)
 		return nil
 	}
+	if result.FormatVersion != IDF_JSON_FORMAT_VERSION {
+		fmt.Printf("%v IDF cache file had old version %v, expected %v, discarding\n", guildID, result.FormatVersion, IDF_JSON_FORMAT_VERSION)
+		return nil
+	}
 	return &result
 }
 
@@ -139,6 +148,7 @@ func NewIDFIndex() *IDFIndex {
 	return &IDFIndex{
 		Messages:           make(map[string]*MessageWordIndex),
 		MessagesForChannel: make(map[string]map[string]bool),
+		FormatVersion:      IDF_JSON_FORMAT_VERSION,
 		//deliberately don't set idf, to signal it needs to be rebuilt.
 	}
 }
