@@ -121,6 +121,15 @@ type IDFIndex struct {
 	idf                map[string]float64
 }
 
+//IDFIndexForGuild returns either a preexisting IDF index from disk cache or a
+//fresh one.z
+func IDFIndexForGuild(guildID string) *IDFIndex {
+	if result := LoadIDFIndex(guildID); result != nil {
+		return result
+	}
+	return NewIDFIndex()
+}
+
 func LoadIDFIndex(guildID string) *IDFIndex {
 	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
 	path := filepath.Join(folderPath, guildID+".json")
@@ -141,6 +150,7 @@ func LoadIDFIndex(guildID string) *IDFIndex {
 		fmt.Printf("%v IDF cache file had old version %v, expected %v, discarding\n", guildID, result.FormatVersion, IDF_JSON_FORMAT_VERSION)
 		return nil
 	}
+	fmt.Printf("Reloading guild IDF cachce for %v\n", guildID)
 	return &result
 }
 

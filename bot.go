@@ -80,13 +80,12 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 			fmt.Printf("Couldn't archive extra threads on boot: %v", err)
 		}
 	}
-	if idf := LoadIDFIndex(event.Guild.ID); idf != nil {
-		fmt.Printf("Reloading guild IDF cachce for %v(%v)\n", event.Guild.Name, event.Guild.ID)
-		b.idfs[event.Guild.ID] = idf
-	} else {
-		if err := b.rebuildIDFForGuild(event.Guild.ID); err != nil {
-			fmt.Printf("Couldn't create IDF for guild: %v\n", err)
-		}
+	b.idfs[event.Guild.ID] = IDFIndexForGuild(event.Guild.ID)
+	//Even if there was a disk cached IDF index for the guild, there could have
+	//been messages that came in while bot was not running that need to be
+	//feteched.
+	if err := b.rebuildIDFForGuild(event.Guild.ID); err != nil {
+		fmt.Printf("Couldn't rebuild IDF for guild: %v\n", err)
 	}
 }
 
@@ -182,7 +181,6 @@ func (b *bot) rebuildIDFForGuild(guildID string) error {
 		return fmt.Errorf("couldn't get guild %v: %w", guildID, err)
 	}
 	fmt.Printf("Rebuilding IDF for Guild %v(%v)\n", guild.Name, guild.ID)
-	b.idfs[guildID] = NewIDFIndex()
 	for _, channel := range guild.Channels {
 		if err := b.rebuildIDFForChannel(channel); err != nil {
 			return fmt.Errorf("couldn't process channel %v: %w", channel.ID, err)
@@ -195,20 +193,39 @@ func (b *bot) rebuildIDFForGuild(guildID string) error {
 //This is the max limit in the discord API. Otherwise it defaults to 0
 const MESSAGES_TO_FETCH = 100
 
+//rebuildIDFForChannel fetches all messages for the channel. It stops when it
+//reaches all messages or notices that it's already seen some of the messages.
+//It can be called any time to re-up and verify all messages are downloaded. For
+//example, if you have a JSON cache, and then the bot was stopped, and then more
+//messages came in before the bot was restarted, this would fetch the ones that
+//came in in the intervening time. (Note: currently we DON'T notice if
+//already-fetched messages now have edited content or new emoji reactions)
 func (b *bot) rebuildIDFForChannel(channel *discordgo.Channel) error {
 	//TODO: test this function
 	if channel.Type != discordgo.ChannelTypeGuildText {
 		return nil
 	}
+	if channel.LastMessageID == "" {
+		//No messages in channel at all!
+		return nil
+	}
 	//We'll walk backwards, starting at lastMessageID, and fetching batches of
 	//messages backwards until we run out.
 	idf := b.idfs[channel.GuildID]
-	fmt.Printf("Fetching messages for IDF for %v (%v)\n", channel.Name, channel.ID)
+	if idf == nil {
+		return fmt.Errorf("no idf object for guild %v", channel.GuildID)
+	}
 	message, err := b.controller.ChannelMessage(channel.ID, channel.LastMessageID)
 	if err == nil {
+		//If we already have the most recent message we can forgo fetching
+		//anything new, assuming we have everything.
+		if idf.MessageWordIndex(message.ID) != nil {
+			return nil
+		}
 		//It's OK for there to be an error--some channels don't have a starter message anyway
 		idf.ProcessMessage(message)
 	}
+	fmt.Printf("Fetching messages for IDF for %v (%v)\n", channel.Name, channel.ID)
 	lastMessageID := channel.LastMessageID
 	continueFetching := true
 	for continueFetching {
@@ -226,6 +243,10 @@ func (b *bot) rebuildIDFForChannel(channel *discordgo.Channel) error {
 			continueFetching = false
 		}
 		for _, message := range messages {
+			//If we've seen the message before then we must have reached where in history we had already fetched to.
+			if idf.MessageWordIndex(message.ID) != nil {
+				continueFetching = false
+			}
 			idf.ProcessMessage(message)
 		}
 		//Messages are sorted with most recent first and least recent last.
