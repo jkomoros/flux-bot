@@ -33,13 +33,15 @@ func init() {
 	nonAlphaNumericRegExp = regexp.MustCompile("[^a-zA-Z0-9]+")
 }
 
+type TFIDF map[string]float64
+
 type MessageWordIndex struct {
 	//stemmed word -> wordCount
 	WordCounts map[string]int `json:"wordCounts"`
 }
 
-func (m *MessageWordIndex) TFIDF(index *IDFIndex) map[string]float64 {
-	result := make(map[string]float64)
+func (m *MessageWordIndex) TFIDF(index *IDFIndex) TFIDF {
+	result := make(TFIDF)
 	idf := index.IDF()
 	for word, count := range m.WordCounts {
 		result[word] = idf[word] * float64(count)
@@ -241,7 +243,7 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 }
 
 //Computes a TFIDF sum for all messages in the given channel
-func (i *IDFIndex) ChannelTFIDF(channelID string) map[string]float64 {
+func (i *IDFIndex) ChannelTFIDF(channelID string) TFIDF {
 	result := make(map[string]float64)
 	for messageID := range i.MessagesForChannel[channelID] {
 		message := i.Messages[messageID]

@@ -126,7 +126,7 @@ func TestProcessMessage(t *testing.T) {
 		"procrastin": 0,
 		"the":        -0.12493873660829993,
 	}
-	assert.For(t).ThatActual(tfidf).Equals(expectedTFIDF)
+	assert.For(t).ThatActual(map[string]float64(tfidf)).Equals(expectedTFIDF)
 
 	expectedChannelTFIDF := map[string]float64{
 		"a":          -0.8745711562580996,
@@ -140,6 +140,6 @@ func TestProcessMessage(t *testing.T) {
 		"rare":       0.17609125905568124,
 		"the":        -1.1244486294746994,
 	}
-	assert.For(t).ThatActual(index.ChannelTFIDF("DefaultChannel")).Equals(expectedChannelTFIDF)
+	assert.For(t).ThatActual(map[string]float64(index.ChannelTFIDF("DefaultChannel"))).Equals(expectedChannelTFIDF)
 
 }
