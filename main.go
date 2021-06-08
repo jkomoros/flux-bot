@@ -11,7 +11,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-const APP_NAME = "gale-x-bot"
+const APP_NAME = "flux-bot"
 const TOKEN_ENV_NAME = "BOT_TOKEN"
 const MAX_ACTIVE_THREADS_ENV_NAME = "BOT_MAX_THREADS"
 const DEBUG_GUILD_ID_ENV_NAME = "DEBUG_GUILD_ID"

@@ -1,5 +1,5 @@
-# gale-x-bot
-Discord bot for GALE-x
+# flux-bot
+Discord bot for FLUX
 
 ## General Info
 
@@ -25,7 +25,7 @@ To create a bot:
 
 1. Create a discord server.
 
-2. Create your own application by going to https://discord.com/developers/applications and creating a new Application. Name it something like "GALEx dev bot".
+2. Create your own application by going to https://discord.com/developers/applications and creating a new Application. Name it something like "FLUX dev bot".
 
 3. Go to the Bot tab and hit add bot. You can give it whatever name you want. UNCHECK the 'Public bot' field and save.
 
@@ -44,7 +44,7 @@ Now you need to get the secret token that allows you to authenticate as your bot
 
 1. Open up a terminal window, and run `export BOT_TOKEN=<PASTED-TOKEN>`. (You can also pass the token on each invocation of the command by using the `-t` parameter).
 
-3. Run the app by doing `go build && ./gale-x-bot` . It will connect to your dev server and print out debug information.
+3. Run the app by doing `go build && ./flux-bot` . It will connect to your dev server and print out debug information.
 
 ## Hacking on application commands
 
@@ -56,7 +56,7 @@ You can provide `debug-guild-id` option (or `DEBUG_GUILD_ID` env var) to registe
 
 The production bot is running in a `tmux` session on a Google Cloud VM running Ubuntu.
 
-1. Connect via SSH to the server. Run `go install github.com/jkomoros/gale-x-bot@latest`
+1. Connect via SSH to the server. Run `go install github.com/jkomoros/flux-bot@latest`
 
 2. Open up the tmux session via `tmux attach`. 
 3. Kill the running one and then run the new one from the command history. 
