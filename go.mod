@@ -1,4 +1,4 @@
-module github.com/jkomoros/gale-x-bot
+module github.com/jkomoros/flux-bot
 
 go 1.16
 
