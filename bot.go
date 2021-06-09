@@ -45,6 +45,9 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 	s.AddHandler(result.guildCreate)
 	s.AddHandler(result.messageCreate)
 	s.AddHandler(result.messageUpdate)
+	s.AddHandler(result.messageReactionAdd)
+	s.AddHandler(result.messageReactionRemove)
+	s.AddHandler(result.messageReactionRemoveAll)
 	s.AddHandler(result.channelCreate)
 	s.AddHandler(result.channelUpdate)
 	s.AddHandler(result.interactionCreate)
@@ -112,6 +115,30 @@ func (b *bot) messageUpdate(s *discordgo.Session, event *discordgo.MessageUpdate
 	if idf := b.idfs[event.GuildID]; idf != nil {
 		idf.ProcessMessage(event.Message)
 	}
+}
+
+func (b *bot) messageReactionChanged(guildID, channelID, messageID string) {
+	//The emoji reaction message doesn't include the message, so fetch it fresh since state doesn't necessarily have it
+	message, err := b.session.ChannelMessage(channelID, messageID)
+	if err != nil {
+		fmt.Printf("Couldn't fetch message after emoji changed (guild: %v, channel: %v, message: %v): %v", guildID, channelID, messageID, err)
+		return
+	}
+	if idf := b.idfs[guildID]; idf != nil {
+		idf.ProcessMessage(message)
+	}
+}
+
+func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
+	b.messageReactionChanged(event.GuildID, event.ChannelID, event.MessageID)
+}
+
+func (b *bot) messageReactionRemove(s *discordgo.Session, event *discordgo.MessageReactionRemove) {
+	b.messageReactionChanged(event.GuildID, event.ChannelID, event.MessageID)
+}
+
+func (b *bot) messageReactionRemoveAll(s *discordgo.Session, event *discordgo.MessageReactionRemoveAll) {
+	b.messageReactionChanged(event.GuildID, event.ChannelID, event.MessageID)
 }
 
 // discordgo callback: called after new channel is created.
