@@ -173,6 +173,8 @@ type idfIndexJSON struct {
 type IDFIndex struct {
 	data *idfIndexJSON
 	idf  map[string]float64
+	//set if there are changes made since the last time we persisted
+	dirty bool
 }
 
 //IDFIndexForGuild returns either a preexisting IDF index from disk cache or a
@@ -223,6 +225,26 @@ func NewIDFIndex() *IDFIndex {
 	}
 }
 
+//Returns true if there's state not yet persisted
+func (i *IDFIndex) NeedsPersistence(guildID string) bool {
+	if i.dirty {
+		return true
+	}
+	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
+	path := filepath.Join(folderPath, guildID+".json")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return true
+	}
+	return false
+}
+
+func (i *IDFIndex) PersistIfNecessary(guildID string) error {
+	if !i.NeedsPersistence(guildID) {
+		return nil
+	}
+	return i.Persist(guildID)
+}
+
 //Persist persists the cache to disk. Load it back up later with guildID.
 func (i *IDFIndex) Persist(guildID string) error {
 	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
@@ -236,6 +258,7 @@ func (i *IDFIndex) Persist(guildID string) error {
 			return fmt.Errorf("couldn't create cache folder: %w", err)
 		}
 	}
+	i.dirty = false
 	return ioutil.WriteFile(path, blob, 0644)
 }
 
@@ -293,6 +316,7 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	}
 	//Signal this needs to be reprocessed
 	i.idf = nil
+	i.dirty = true
 	i.data.Messages[message.ID] = newMessageWordIndex(message)
 	if _, ok := i.data.MessagesForChannel[message.ChannelID]; !ok {
 		i.data.MessagesForChannel[message.ChannelID] = make(map[string]bool)

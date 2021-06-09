@@ -613,7 +613,7 @@ func (g *threadGroupInfo) archiveThread(controller Controller, session *discordg
 //Called before the program exits when the bot should clean up, persist state, etc.
 func (b *bot) Close() {
 	for guildID, idfIndex := range b.idfs {
-		if err := idfIndex.Persist(guildID); err != nil {
+		if err := idfIndex.PersistIfNecessary(guildID); err != nil {
 			fmt.Printf("Couldn't persist IDF index for %v: %v", guildID, err)
 		}
 	}
