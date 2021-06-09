@@ -26,7 +26,7 @@ const (
 
 //This number should be incremetned every time the format of the JSON cache
 //changes, so old caches will be discarded.
-const IDF_JSON_FORMAT_VERSION = 1
+const IDF_JSON_FORMAT_VERSION = 2
 
 func init() {
 	spaceRegExp = regexp.MustCompile(`\s+`)
