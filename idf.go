@@ -245,6 +245,14 @@ func (i *IDFIndex) PersistIfNecessary(guildID string) error {
 	return i.Persist(guildID)
 }
 
+func (i *IDFIndex) setNeedsPersistence() {
+	i.dirty = true
+}
+
+func (i *IDFIndex) setPersisted() {
+	i.dirty = false
+}
+
 //Persist persists the cache to disk. Load it back up later with guildID.
 func (i *IDFIndex) Persist(guildID string) error {
 	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
@@ -258,7 +266,7 @@ func (i *IDFIndex) Persist(guildID string) error {
 			return fmt.Errorf("couldn't create cache folder: %w", err)
 		}
 	}
-	i.dirty = false
+	i.setPersisted()
 	return ioutil.WriteFile(path, blob, 0644)
 }
 
@@ -316,12 +324,12 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	}
 	//Signal this needs to be reprocessed
 	i.idf = nil
-	i.dirty = true
 	i.data.Messages[message.ID] = newMessageWordIndex(message)
 	if _, ok := i.data.MessagesForChannel[message.ChannelID]; !ok {
 		i.data.MessagesForChannel[message.ChannelID] = make(map[string]bool)
 	}
 	i.data.MessagesForChannel[message.ChannelID][message.ID] = true
+	i.setNeedsPersistence()
 }
 
 //Computes a TFIDF sum for all messages in the given channel
