@@ -268,6 +268,10 @@ func (i *IDFIndex) setPersisted() {
 }
 
 func (i *IDFIndex) autoSave() {
+	//Don't print the autosave message unless we're actually persisting.
+	if !i.NeedsPersistence() {
+		return
+	}
 	fmt.Printf("Autosaving index for guild %v\n", i.guildID)
 	if err := i.PersistIfNecessary(); err != nil {
 		fmt.Printf("Error: couldn't autosave: %v\n", err)
