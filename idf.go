@@ -56,7 +56,48 @@ func (t *TFIDF) TopWords(count int) []string {
 		return t.values[words[i]] > t.values[words[j]]
 	}
 	sort.Slice(words, wordSorter)
-	return words[:count]
+	return t.restemWords(words[:count])
+}
+
+//restemWords takes stemmed words and restems them based on the most common
+//words in the collection.
+func (t *TFIDF) restemWords(stemmedWords []string) []string {
+	//stemmedWord --> restemmedWord -> count
+	restemCandidates := make(map[string]map[string]int)
+	for _, index := range t.messages {
+		subRestemMap := restemsForContent(index.Message.Content)
+		for stemmedWord, subMap := range subRestemMap {
+			if _, ok := restemCandidates[stemmedWord]; !ok {
+				restemCandidates[stemmedWord] = make(map[string]int)
+			}
+			for originalWord, count := range subMap {
+				restemCandidates[stemmedWord][originalWord] += count
+			}
+		}
+	}
+
+	result := make([]string, len(stemmedWords))
+	for i, stemmedWord := range stemmedWords {
+		candidates := restemCandidates[stemmedWord]
+		//If we don't have a candidate, just leave as is
+		if candidates == nil {
+			result[i] = stemmedWord
+			continue
+		}
+		bestCandidate := ""
+		bestCount := 0
+		for candidate, count := range candidates {
+			if count <= bestCount {
+				continue
+			}
+			bestCandidate = candidate
+			bestCount = count
+		}
+		result[i] = bestCandidate
+	}
+
+	return result
+
 }
 
 //Effectively a subset of discordgo.Message with only the fields we want.
@@ -173,7 +214,32 @@ func wordsForString(input string) []string {
 	return strings.Split(input, " ")
 }
 
+//restemsForContent returns the map of stemmedWord -> unstemmedWord --> count
+func restemsForContent(input string) map[string]map[string]int {
+	//Substantially recreated in extractWordsFromContent
+
+	//normalize all spaces to just a single space
+	input = spaceRegExp.ReplaceAllString(input, " ")
+	input = removeMentionsAndURLS(input)
+
+	result := make(map[string]map[string]int)
+
+	for _, word := range wordsForString(input) {
+		stemmedWord := normalizeWord(word)
+		if stemmedWord == "" {
+			continue
+		}
+		if _, ok := result[stemmedWord]; !ok {
+			result[stemmedWord] = make(map[string]int)
+		}
+		result[stemmedWord][word] += 1
+	}
+	return result
+}
+
 func extractWordsFromContent(input string) []string {
+	//Substantially recreated in restemsForContent
+
 	//normalize all spaces to just a single space
 	input = spaceRegExp.ReplaceAllString(input, " ")
 	input = removeMentionsAndURLS(input)

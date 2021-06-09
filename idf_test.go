@@ -84,7 +84,7 @@ func TestExtractWordsFromContent(t *testing.T) {
 func TestProcessMessage(t *testing.T) {
 	inputs := []string{
 		"the the the foo bar baz is a procrastinate",
-		"procrastination Procrastinate blarg baz the a is diamond",
+		"procrastination Procrastinate blarg baz the a is diamonds",
 		"is is is a a a a is a the the the the the foo bar rare",
 	}
 	//TODO: are these really reasonable values for those inputs?
@@ -161,6 +161,15 @@ func TestProcessMessage(t *testing.T) {
 		return channelTFIDF.messages[i].Message.ID < channelTFIDF.messages[j].Message.ID
 	})
 	assert.For(t).ThatActual(channelTFIDF).Equals(expectedChannelTFIDF).ThenDiffOnFail()
+
+	expectedTopWords := []string{
+		"blarg",
+		"diamonds",
+		"rare",
+	}
+	actualTopWords := channelTFIDF.TopWords(3)
+	sort.Strings(actualTopWords)
+	assert.For(t).ThatActual(actualTopWords).Equals(expectedTopWords)
 
 }
 
