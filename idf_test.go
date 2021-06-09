@@ -117,38 +117,44 @@ func TestProcessMessage(t *testing.T) {
 	messageIndex := index.MessageWordIndex("Message 1")
 	assert.For(t).ThatActual(messageIndex).IsNotNil()
 	tfidf := messageIndex.TFIDF(index)
-	expectedTFIDF := map[string]float64{
-		"a":          -0.12493873660829993,
-		"baz":        0,
-		"blarg":      0.17609125905568124,
-		"diamond":    0.17609125905568124,
-		"is":         -0.12493873660829993,
-		"procrastin": 0,
-		"the":        -0.12493873660829993,
+	expectedTFIDF := &TFIDF{
+		values: map[string]float64{
+			"a":          -0.12493873660829993,
+			"baz":        0,
+			"blarg":      0.17609125905568124,
+			"diamond":    0.17609125905568124,
+			"is":         -0.12493873660829993,
+			"procrastin": 0,
+			"the":        -0.12493873660829993,
+		},
 	}
-	assert.For(t).ThatActual(map[string]float64(tfidf)).Equals(expectedTFIDF)
+	assert.For(t).ThatActual(tfidf).Equals(expectedTFIDF)
 
-	expectedChannelTFIDF := map[string]float64{
-		"a":          -0.8745711562580996,
-		"bar":        0,
-		"baz":        0,
-		"blarg":      0.17609125905568124,
-		"diamond":    0.17609125905568124,
-		"foo":        0,
-		"is":         -0.7496324196497997,
-		"procrastin": 0,
-		"rare":       0.17609125905568124,
-		"the":        -1.1244486294746994,
+	expectedChannelTFIDF := &TFIDF{
+		values: map[string]float64{
+			"a":          -0.8745711562580996,
+			"bar":        0,
+			"baz":        0,
+			"blarg":      0.17609125905568124,
+			"diamond":    0.17609125905568124,
+			"foo":        0,
+			"is":         -0.7496324196497997,
+			"procrastin": 0,
+			"rare":       0.17609125905568124,
+			"the":        -1.1244486294746994,
+		},
 	}
-	assert.For(t).ThatActual(map[string]float64(index.ChannelTFIDF("DefaultChannel"))).Equals(expectedChannelTFIDF)
+	assert.For(t).ThatActual(index.ChannelTFIDF("DefaultChannel")).Equals(expectedChannelTFIDF)
 
 }
 
 func TestTFIDFTopWords(t *testing.T) {
-	tfidf := TFIDF{
-		"one":   0.5,
-		"two":   1.0,
-		"three": 0.25,
+	tfidf := &TFIDF{
+		values: map[string]float64{
+			"one":   0.5,
+			"two":   1.0,
+			"three": 0.25,
+		},
 	}
 	assert.For(t).ThatActual(tfidf.TopWords(3)).Equals([]string{"two", "one", "three"})
 	assert.For(t).ThatActual(tfidf.TopWords(2)).Equals([]string{"two", "one"})

@@ -38,19 +38,21 @@ func init() {
 	nonAlphaNumericRegExp = regexp.MustCompile("[^a-zA-Z0-9]+")
 }
 
-type TFIDF map[string]float64
+type TFIDF struct {
+	values map[string]float64
+}
 
 //TopWords returns count of the top words
-func (t TFIDF) TopWords(count int) []string {
-	if count > len(t) {
-		count = len(t)
+func (t *TFIDF) TopWords(count int) []string {
+	if count > len(t.values) {
+		count = len(t.values)
 	}
 	var words []string
-	for word := range t {
+	for word := range t.values {
 		words = append(words, word)
 	}
 	wordSorter := func(i int, j int) bool {
-		return t[words[i]] > t[words[j]]
+		return t.values[words[i]] > t.values[words[j]]
 	}
 	sort.Slice(words, wordSorter)
 	return words[:count]
@@ -108,13 +110,15 @@ type MessageWordIndex struct {
 	WordCounts map[string]int `json:"wordCounts"`
 }
 
-func (m *MessageWordIndex) TFIDF(index *IDFIndex) TFIDF {
-	result := make(TFIDF)
+func (m *MessageWordIndex) TFIDF(index *IDFIndex) *TFIDF {
+	values := make(map[string]float64)
 	idf := index.IDF()
 	for word, count := range m.WordCounts {
-		result[word] = idf[word] * float64(count)
+		values[word] = idf[word] * float64(count)
 	}
-	return result
+	return &TFIDF{
+		values: values,
+	}
 }
 
 func normalizeWord(input string) string {
@@ -381,13 +385,15 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 }
 
 //Computes a TFIDF sum for all messages in the given channel
-func (i *IDFIndex) ChannelTFIDF(channelID string) TFIDF {
-	result := make(map[string]float64)
+func (i *IDFIndex) ChannelTFIDF(channelID string) *TFIDF {
+	values := make(map[string]float64)
 	for messageID := range i.data.MessagesForChannel[channelID] {
 		message := i.data.Messages[messageID]
-		for key, val := range message.TFIDF(i) {
-			result[key] += val
+		for key, val := range message.TFIDF(i).values {
+			values[key] += val
 		}
 	}
-	return result
+	return &TFIDF{
+		values: values,
+	}
 }
