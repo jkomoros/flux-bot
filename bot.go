@@ -44,6 +44,7 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 	s.AddHandler(result.ready)
 	s.AddHandler(result.guildCreate)
 	s.AddHandler(result.messageCreate)
+	s.AddHandler(result.messageUpdate)
 	s.AddHandler(result.channelCreate)
 	s.AddHandler(result.channelUpdate)
 	s.AddHandler(result.interactionCreate)
@@ -104,6 +105,12 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 	}
 	if err := b.moveThreadToTopOfThreads(channel); err != nil {
 		fmt.Printf("message received in a thread but couldn't move it: %v", err)
+	}
+}
+
+func (b *bot) messageUpdate(s *discordgo.Session, event *discordgo.MessageUpdate) {
+	if idf := b.idfs[event.GuildID]; idf != nil {
+		idf.ProcessMessage(event.Message)
 	}
 }
 
