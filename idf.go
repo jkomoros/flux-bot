@@ -27,6 +27,8 @@ const (
 	IDF_CACHE_PATH = "idf"
 )
 
+const DEBUG_PRINT = false
+
 const AUTO_SAVE_INTERVAL = 5 * time.Minute
 
 //This number should be incremetned every time the format of the JSON cache
@@ -43,8 +45,7 @@ type TFIDF struct {
 	messages []*MessageWordIndex
 }
 
-//TopWords returns count of the top words
-func (t *TFIDF) TopWords(count int) []string {
+func (t *TFIDF) topStemmedWords(count int) []string {
 	if count > len(t.values) {
 		count = len(t.values)
 	}
@@ -56,7 +57,49 @@ func (t *TFIDF) TopWords(count int) []string {
 		return t.values[words[i]] > t.values[words[j]]
 	}
 	sort.Slice(words, wordSorter)
-	return t.restemWords(words[:count])
+	return words[:count]
+}
+
+//AutoTopWords is like TopWords but sets the count to be no higher than maxCount
+//but otherwise pick the count with the biggest tfidf dropoff.
+func (t *TFIDF) AutoTopWords(maxCount int) []string {
+	rawWords := t.topStemmedWords(maxCount)
+	if DEBUG_PRINT {
+		fmt.Printf("words: %v\n", rawWords)
+	}
+
+	maxDrop := 0.0
+	maxDropIndex := 1
+	lastValue := 0.0
+	for i, rawWord := range rawWords {
+		value := t.values[rawWord]
+		if i == 0 {
+			lastValue = value
+			continue
+		}
+		diff := lastValue - value
+		lastValue = value
+
+		if DEBUG_PRINT {
+			fmt.Printf("i: %v, word: %v, value: %v, drop: %v\n", i, rawWord, value, diff)
+		}
+
+		if diff > maxDrop {
+			maxDrop = diff
+			maxDropIndex = i
+		}
+	}
+
+	if DEBUG_PRINT {
+		fmt.Printf("maxDropIndex: %v, total words: %v\n", maxDropIndex, rawWords[:maxDropIndex])
+	}
+
+	return t.restemWords(rawWords[:maxDropIndex])
+}
+
+//TopWords returns count of the top words
+func (t *TFIDF) TopWords(count int) []string {
+	return t.restemWords(t.topStemmedWords(count))
 }
 
 //restemWords takes stemmed words and restems them based on the most common

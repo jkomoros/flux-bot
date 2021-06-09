@@ -168,7 +168,7 @@ func (b *bot) suggestThreadNameInteraction(s *discordgo.Session, event *discordg
 	}
 
 	//TODO: pick the length automatically
-	topWords := idf.ChannelTFIDF(event.ChannelID).TopWords(3)
+	topWords := idf.ChannelTFIDF(event.ChannelID).AutoTopWords(6)
 
 	s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,

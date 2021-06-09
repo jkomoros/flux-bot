@@ -171,6 +171,16 @@ func TestProcessMessage(t *testing.T) {
 	sort.Strings(actualTopWords)
 	assert.For(t).ThatActual(actualTopWords).Equals(expectedTopWords)
 
+	expectedAutoTopWords := []string{
+		"blarg",
+		"diamonds",
+		"rare",
+	}
+
+	actualAutoTopWords := channelTFIDF.AutoTopWords(6)
+	sort.Strings(actualAutoTopWords)
+	assert.For(t).ThatActual(actualAutoTopWords).Equals(expectedAutoTopWords)
+
 }
 
 func TestTFIDFTopWords(t *testing.T) {
