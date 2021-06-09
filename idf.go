@@ -39,7 +39,8 @@ func init() {
 }
 
 type TFIDF struct {
-	values map[string]float64
+	values   map[string]float64
+	messages []*MessageWordIndex
 }
 
 //TopWords returns count of the top words
@@ -110,6 +111,22 @@ type MessageWordIndex struct {
 	WordCounts map[string]int `json:"wordCounts"`
 }
 
+//joinTFIDF joins multiple TFIDFs together
+func joinTFIDF(tfidf ...*TFIDF) *TFIDF {
+	values := make(map[string]float64)
+	var messages []*MessageWordIndex
+	for _, t := range tfidf {
+		for key, val := range t.values {
+			values[key] += val
+		}
+		messages = append(messages, t.messages...)
+	}
+	return &TFIDF{
+		values:   values,
+		messages: messages,
+	}
+}
+
 func (m *MessageWordIndex) TFIDF(index *IDFIndex) *TFIDF {
 	values := make(map[string]float64)
 	idf := index.IDF()
@@ -117,7 +134,8 @@ func (m *MessageWordIndex) TFIDF(index *IDFIndex) *TFIDF {
 		values[word] = idf[word] * float64(count)
 	}
 	return &TFIDF{
-		values: values,
+		values:   values,
+		messages: []*MessageWordIndex{m},
 	}
 }
 
@@ -386,14 +404,9 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 
 //Computes a TFIDF sum for all messages in the given channel
 func (i *IDFIndex) ChannelTFIDF(channelID string) *TFIDF {
-	values := make(map[string]float64)
+	var tfidfs []*TFIDF
 	for messageID := range i.data.MessagesForChannel[channelID] {
-		message := i.data.Messages[messageID]
-		for key, val := range message.TFIDF(i).values {
-			values[key] += val
-		}
+		tfidfs = append(tfidfs, i.data.Messages[messageID].TFIDF(i))
 	}
-	return &TFIDF{
-		values: values,
-	}
+	return joinTFIDF(tfidfs...)
 }

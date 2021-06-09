@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -99,14 +100,18 @@ func TestProcessMessage(t *testing.T) {
 		"rare":       0.17609125905568124,
 		"the":        -0.12493873660829993,
 	}
-	index := NewIDFIndex("invalid_guild_id")
-	for i, message := range inputs {
-		index.ProcessMessage(&discordgo.Message{
+	var messages []*discordgo.Message
+	for i, input := range inputs {
+		messages = append(messages, &discordgo.Message{
 			Type:      discordgo.MessageTypeDefault,
-			Content:   message,
+			Content:   input,
 			ID:        "Message " + strconv.Itoa(i),
 			ChannelID: "DefaultChannel",
 		})
+	}
+	index := NewIDFIndex("invalid_guild_id")
+	for _, message := range messages {
+		index.ProcessMessage(message)
 	}
 	if index.DocumentCount() != len(inputs) {
 		t.Errorf("Incorrect number of messages. Got %v, expected %v", index.DocumentCount(), len(inputs))
@@ -127,6 +132,7 @@ func TestProcessMessage(t *testing.T) {
 			"procrastin": 0,
 			"the":        -0.12493873660829993,
 		},
+		messages: []*MessageWordIndex{index.data.Messages["Message 1"]},
 	}
 	assert.For(t).ThatActual(tfidf).Equals(expectedTFIDF)
 
@@ -143,8 +149,18 @@ func TestProcessMessage(t *testing.T) {
 			"rare":       0.17609125905568124,
 			"the":        -1.1244486294746994,
 		},
+		messages: []*MessageWordIndex{
+			index.data.Messages["Message 0"],
+			index.data.Messages["Message 1"],
+			index.data.Messages["Message 2"],
+		},
 	}
-	assert.For(t).ThatActual(index.ChannelTFIDF("DefaultChannel")).Equals(expectedChannelTFIDF)
+	channelTFIDF := index.ChannelTFIDF("DefaultChannel")
+	//Give messages a stable sort order
+	sort.Slice(channelTFIDF.messages, func(i, j int) bool {
+		return channelTFIDF.messages[i].Message.ID < channelTFIDF.messages[j].Message.ID
+	})
+	assert.For(t).ThatActual(channelTFIDF).Equals(expectedChannelTFIDF).ThenDiffOnFail()
 
 }
 
