@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -180,6 +181,7 @@ type IDFIndex struct {
 	//set if there are changes made since the last time we persisted
 	dirty         bool
 	autoSaveTimer *time.Timer
+	rwMutex       sync.RWMutex
 }
 
 //IDFIndexForGuild returns either a preexisting IDF index from disk cache or a
@@ -282,7 +284,9 @@ func (i *IDFIndex) autoSave() {
 func (i *IDFIndex) Persist() error {
 	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
 	path := filepath.Join(folderPath, i.guildID+".json")
+	i.rwMutex.RLock()
 	blob, err := json.MarshalIndent(i.data, "", "\t")
+	i.rwMutex.RUnlock()
 	if err != nil {
 		return fmt.Errorf("couldnt format json: %w", err)
 	}
@@ -348,6 +352,7 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 		return
 	}
 	//Signal this needs to be reprocessed
+	i.rwMutex.Lock()
 	i.idf = nil
 	i.data.Messages[message.ID] = newMessageWordIndex(message)
 	if _, ok := i.data.MessagesForChannel[message.ChannelID]; !ok {
@@ -355,6 +360,7 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	}
 	i.data.MessagesForChannel[message.ChannelID][message.ID] = true
 	i.setNeedsPersistence()
+	i.rwMutex.Unlock()
 }
 
 //Computes a TFIDF sum for all messages in the given channel
