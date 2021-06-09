@@ -171,8 +171,9 @@ type idfIndexJSON struct {
 //IDFIndex stores information for calculating IDF of a thread. Get a new one
 //from NewIDFIndex.
 type IDFIndex struct {
-	data *idfIndexJSON
-	idf  map[string]float64
+	data    *idfIndexJSON
+	guildID string
+	idf     map[string]float64
 	//set if there are changes made since the last time we persisted
 	dirty bool
 }
@@ -183,7 +184,7 @@ func IDFIndexForGuild(guildID string) *IDFIndex {
 	if result := LoadIDFIndex(guildID); result != nil {
 		return result
 	}
-	return NewIDFIndex()
+	return NewIDFIndex(guildID)
 }
 
 func LoadIDFIndex(guildID string) *IDFIndex {
@@ -213,36 +214,37 @@ func LoadIDFIndex(guildID string) *IDFIndex {
 	}
 }
 
-func NewIDFIndex() *IDFIndex {
+func NewIDFIndex(guildID string) *IDFIndex {
 	data := &idfIndexJSON{
 		Messages:           make(map[string]*MessageWordIndex),
 		MessagesForChannel: make(map[string]map[string]bool),
 		FormatVersion:      IDF_JSON_FORMAT_VERSION,
 	}
 	return &IDFIndex{
-		data: data,
+		data:    data,
+		guildID: guildID,
 		//deliberately don't set idf, to signal it needs to be rebuilt.
 	}
 }
 
 //Returns true if there's state not yet persisted
-func (i *IDFIndex) NeedsPersistence(guildID string) bool {
+func (i *IDFIndex) NeedsPersistence() bool {
 	if i.dirty {
 		return true
 	}
 	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
-	path := filepath.Join(folderPath, guildID+".json")
+	path := filepath.Join(folderPath, i.guildID+".json")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return true
 	}
 	return false
 }
 
-func (i *IDFIndex) PersistIfNecessary(guildID string) error {
-	if !i.NeedsPersistence(guildID) {
+func (i *IDFIndex) PersistIfNecessary() error {
+	if !i.NeedsPersistence() {
 		return nil
 	}
-	return i.Persist(guildID)
+	return i.Persist()
 }
 
 func (i *IDFIndex) setNeedsPersistence() {
@@ -254,9 +256,9 @@ func (i *IDFIndex) setPersisted() {
 }
 
 //Persist persists the cache to disk. Load it back up later with guildID.
-func (i *IDFIndex) Persist(guildID string) error {
+func (i *IDFIndex) Persist() error {
 	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
-	path := filepath.Join(folderPath, guildID+".json")
+	path := filepath.Join(folderPath, i.guildID+".json")
 	blob, err := json.MarshalIndent(i.data, "", "\t")
 	if err != nil {
 		return fmt.Errorf("couldnt format json: %w", err)

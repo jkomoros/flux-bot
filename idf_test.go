@@ -99,7 +99,7 @@ func TestProcessMessage(t *testing.T) {
 		"rare":       0.17609125905568124,
 		"the":        -0.12493873660829993,
 	}
-	index := NewIDFIndex()
+	index := NewIDFIndex("invalid_guild_id")
 	for i, message := range inputs {
 		index.ProcessMessage(&discordgo.Message{
 			Type:      discordgo.MessageTypeDefault,
