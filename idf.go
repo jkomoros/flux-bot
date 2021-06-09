@@ -211,11 +211,32 @@ func joinTFIDF(tfidf ...*TFIDF) *TFIDF {
 	}
 }
 
+var IMPORTANT_REACTIONS = map[string]float64{
+	"🎯": 0.5,
+	"🤯": 1.0,
+	"💎": 1.0,
+	"💯": 0.5,
+}
+
+//Mutiplier is how important this message is, useful to tweak TFIDF. Curently just doubles for each of
+//the special emojis it has. 1.0 is the default
+func (m *MessageWordIndex) Multiplier() float64 {
+	multiplier := 1.0
+	for _, reaction := range m.Message.Reactions {
+		multiplier += IMPORTANT_REACTIONS[reaction.Emoji.Name]
+	}
+	return multiplier
+}
+
 func (m *MessageWordIndex) TFIDF(index *IDFIndex) *TFIDF {
 	values := make(map[string]float64)
 	idf := index.IDF()
 	for word, count := range m.WordCounts {
 		values[word] = idf[word] * float64(count)
+	}
+	multiplier := m.Multiplier()
+	for word := range values {
+		values[word] *= multiplier
 	}
 	return &TFIDF{
 		values:   values,
