@@ -320,8 +320,9 @@ func LoadIDFIndex(guildID string) *IDFIndex {
 	}
 	fmt.Printf("Reloading guild IDF cachce for %v\n", guildID)
 	return &IDFIndex{
-		data: &result,
-		idf:  nil,
+		data:    &result,
+		guildID: guildID,
+		idf:     nil,
 	}
 }
 
@@ -387,6 +388,9 @@ func (i *IDFIndex) autoSave() {
 
 //Persist persists the cache to disk. Load it back up later with guildID.
 func (i *IDFIndex) Persist() error {
+	if i.guildID == "" {
+		return fmt.Errorf("IDF index had no guildID")
+	}
 	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
 	path := filepath.Join(folderPath, i.guildID+".json")
 	i.rwMutex.RLock()
