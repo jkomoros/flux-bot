@@ -35,7 +35,54 @@ func init() {
 
 type TFIDF map[string]float64
 
+//Effectively a subset of discordgo.Message with only the fields we want.
+type Message struct {
+	ID              string                         `json:"id"`
+	Content         string                         `json:"content"`
+	Timestamp       discordgo.Timestamp            `json:"timestamp"`
+	EditedTimestamp discordgo.Timestamp            `json:"edited_timestamp"`
+	Attachments     []*discordgo.MessageAttachment `json:"attachments"`
+	Reactions       []*discordgo.MessageReactions  `json:"reactions"`
+	Type            discordgo.MessageType          `json:"type"`
+
+	//These are ID fields for the items that would be too large to output multiple times
+	//Author
+	AuthorID string `json:"author_id"`
+	//Mentions
+	MentionUserIDs []string `json:"mention_user_ids"`
+	//MentionChannels
+	MentionChannelIDs []string `json:"mention_channel_ids"`
+}
+
+func messageFromDiscordMessage(input *discordgo.Message) *Message {
+	userIDs := make([]string, 0)
+	for _, user := range input.Mentions {
+		userIDs = append(userIDs, user.ID)
+	}
+	channelIDs := make([]string, 0)
+	for _, channel := range input.MentionChannels {
+		channelIDs = append(channelIDs, channel.ID)
+	}
+	var authorID string
+	if input.Author != nil {
+		authorID = input.Author.ID
+	}
+	return &Message{
+		ID:                input.ID,
+		Content:           input.Content,
+		Timestamp:         input.Timestamp,
+		EditedTimestamp:   input.EditedTimestamp,
+		Attachments:       input.Attachments,
+		Reactions:         input.Reactions,
+		Type:              input.Type,
+		AuthorID:          authorID,
+		MentionUserIDs:    userIDs,
+		MentionChannelIDs: channelIDs,
+	}
+}
+
 type MessageWordIndex struct {
+	Message *Message `json:"message"`
 	//stemmed word -> wordCount
 	WordCounts map[string]int `json:"wordCounts"`
 }
@@ -108,6 +155,7 @@ func newMessageWordIndex(message *discordgo.Message) *MessageWordIndex {
 	}
 
 	return &MessageWordIndex{
+		Message:    messageFromDiscordMessage(message),
 		WordCounts: wc,
 	}
 }
