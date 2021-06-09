@@ -143,3 +143,15 @@ func TestProcessMessage(t *testing.T) {
 	assert.For(t).ThatActual(map[string]float64(index.ChannelTFIDF("DefaultChannel"))).Equals(expectedChannelTFIDF)
 
 }
+
+func TestTFIDFTopWords(t *testing.T) {
+	tfidf := TFIDF{
+		"one":   0.5,
+		"two":   1.0,
+		"three": 0.25,
+	}
+	assert.For(t).ThatActual(tfidf.TopWords(3)).Equals([]string{"two", "one", "three"})
+	assert.For(t).ThatActual(tfidf.TopWords(2)).Equals([]string{"two", "one"})
+	assert.For(t).ThatActual(tfidf.TopWords(4)).Equals([]string{"two", "one", "three"})
+
+}

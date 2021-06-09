@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +39,22 @@ func init() {
 }
 
 type TFIDF map[string]float64
+
+//TopWords returns count of the top words
+func (t TFIDF) TopWords(count int) []string {
+	if count > len(t) {
+		count = len(t)
+	}
+	var words []string
+	for word := range t {
+		words = append(words, word)
+	}
+	wordSorter := func(i int, j int) bool {
+		return t[words[i]] > t[words[j]]
+	}
+	sort.Slice(words, wordSorter)
+	return words[:count]
+}
 
 //Effectively a subset of discordgo.Message with only the fields we want.
 type Message struct {
