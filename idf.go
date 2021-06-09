@@ -112,15 +112,19 @@ func newMessageWordIndex(message *discordgo.Message) *MessageWordIndex {
 	}
 }
 
-//IDFIndex stores information for calculating IDF of a thread. Get a new one
-//from NewIDFIndex.
-type IDFIndex struct {
+type idfIndexJSON struct {
 	//messageID --> *MessageWordIndex
 	Messages map[string]*MessageWordIndex `json:"messages"`
 	//channelID --> set of messageID
 	MessagesForChannel map[string]map[string]bool `json:"messageForChannel"`
 	FormatVersion      int                        `json:"formatVersion"`
-	idf                map[string]float64
+}
+
+//IDFIndex stores information for calculating IDF of a thread. Get a new one
+//from NewIDFIndex.
+type IDFIndex struct {
+	data *idfIndexJSON
+	idf  map[string]float64
 }
 
 //IDFIndexForGuild returns either a preexisting IDF index from disk cache or a
@@ -143,7 +147,7 @@ func LoadIDFIndex(guildID string) *IDFIndex {
 		fmt.Printf("couldn't read json file for %v: %v", guildID, err)
 		return nil
 	}
-	var result IDFIndex
+	var result idfIndexJSON
 	if err := json.Unmarshal(blob, &result); err != nil {
 		fmt.Printf("couldn't unmarshal json for %v: %v", guildID, err)
 		return nil
@@ -153,14 +157,20 @@ func LoadIDFIndex(guildID string) *IDFIndex {
 		return nil
 	}
 	fmt.Printf("Reloading guild IDF cachce for %v\n", guildID)
-	return &result
+	return &IDFIndex{
+		data: &result,
+		idf:  nil,
+	}
 }
 
 func NewIDFIndex() *IDFIndex {
-	return &IDFIndex{
+	data := &idfIndexJSON{
 		Messages:           make(map[string]*MessageWordIndex),
 		MessagesForChannel: make(map[string]map[string]bool),
 		FormatVersion:      IDF_JSON_FORMAT_VERSION,
+	}
+	return &IDFIndex{
+		data: data,
 		//deliberately don't set idf, to signal it needs to be rebuilt.
 	}
 }
@@ -169,7 +179,7 @@ func NewIDFIndex() *IDFIndex {
 func (i *IDFIndex) Persist(guildID string) error {
 	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
 	path := filepath.Join(folderPath, guildID+".json")
-	blob, err := json.MarshalIndent(i, "", "\t")
+	blob, err := json.MarshalIndent(i.data, "", "\t")
 	if err != nil {
 		return fmt.Errorf("couldnt format json: %w", err)
 	}
@@ -198,7 +208,7 @@ func (i *IDFIndex) IDF() map[string]float64 {
 func (i *IDFIndex) rebuildIDF() {
 	//for each word, the number of messages that contain the word at least once.
 	corpusWords := make(map[string]int)
-	for _, messageIndex := range i.Messages {
+	for _, messageIndex := range i.data.Messages {
 		for word := range messageIndex.WordCounts {
 			corpusWords[word] += 1
 		}
@@ -216,11 +226,11 @@ func (i *IDFIndex) rebuildIDF() {
 }
 
 func (i *IDFIndex) DocumentCount() int {
-	return len(i.Messages)
+	return len(i.data.Messages)
 }
 
 func (i *IDFIndex) MessageWordIndex(messageID string) *MessageWordIndex {
-	return i.Messages[messageID]
+	return i.data.Messages[messageID]
 }
 
 //ProcessMessage will process a given message and update the index.
@@ -235,18 +245,18 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	}
 	//Signal this needs to be reprocessed
 	i.idf = nil
-	i.Messages[message.ID] = newMessageWordIndex(message)
-	if _, ok := i.MessagesForChannel[message.ChannelID]; !ok {
-		i.MessagesForChannel[message.ChannelID] = make(map[string]bool)
+	i.data.Messages[message.ID] = newMessageWordIndex(message)
+	if _, ok := i.data.MessagesForChannel[message.ChannelID]; !ok {
+		i.data.MessagesForChannel[message.ChannelID] = make(map[string]bool)
 	}
-	i.MessagesForChannel[message.ChannelID][message.ID] = true
+	i.data.MessagesForChannel[message.ChannelID][message.ID] = true
 }
 
 //Computes a TFIDF sum for all messages in the given channel
 func (i *IDFIndex) ChannelTFIDF(channelID string) TFIDF {
 	result := make(map[string]float64)
-	for messageID := range i.MessagesForChannel[channelID] {
-		message := i.Messages[messageID]
+	for messageID := range i.data.MessagesForChannel[channelID] {
+		message := i.data.Messages[messageID]
 		for key, val := range message.TFIDF(i) {
 			result[key] += val
 		}
