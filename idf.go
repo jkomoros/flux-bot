@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/dchest/stemmer/porter2"
@@ -23,6 +24,8 @@ const (
 	CACHE_PATH     = ".cache"
 	IDF_CACHE_PATH = "idf"
 )
+
+const AUTO_SAVE_INTERVAL = 5 * time.Minute
 
 //This number should be incremetned every time the format of the JSON cache
 //changes, so old caches will be discarded.
@@ -175,7 +178,8 @@ type IDFIndex struct {
 	guildID string
 	idf     map[string]float64
 	//set if there are changes made since the last time we persisted
-	dirty bool
+	dirty         bool
+	autoSaveTimer *time.Timer
 }
 
 //IDFIndexForGuild returns either a preexisting IDF index from disk cache or a
@@ -249,10 +253,25 @@ func (i *IDFIndex) PersistIfNecessary() error {
 
 func (i *IDFIndex) setNeedsPersistence() {
 	i.dirty = true
+	if i.autoSaveTimer != nil {
+		return
+	}
+	i.autoSaveTimer = time.AfterFunc(AUTO_SAVE_INTERVAL, i.autoSave)
 }
 
 func (i *IDFIndex) setPersisted() {
 	i.dirty = false
+	if i.autoSaveTimer != nil {
+		i.autoSaveTimer.Stop()
+		i.autoSaveTimer = nil
+	}
+}
+
+func (i *IDFIndex) autoSave() {
+	fmt.Printf("Autosaving index for guild %v\n", i.guildID)
+	if err := i.PersistIfNecessary(); err != nil {
+		fmt.Printf("Error: couldn't autosave: %v\n", err)
+	}
 }
 
 //Persist persists the cache to disk. Load it back up later with guildID.
