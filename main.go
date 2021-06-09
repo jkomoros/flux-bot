@@ -33,6 +33,7 @@ var maxActiveThreads int
 var debugGuildIDForCommand string
 
 const ARCHIVE_COMMAND_NAME = "archive"
+const SUGGEST_THREAD_NAME_COMMAND_NAME = "suggest-thread-name"
 
 var (
 	//When creating a command also update bot.interactionCreate to dispatch to the handler for the interaction
@@ -40,6 +41,10 @@ var (
 		{
 			Name:        ARCHIVE_COMMAND_NAME,
 			Description: "Archive the current thread forcibly (not waiting for it to fall off the end)",
+		},
+		{
+			Name:        SUGGEST_THREAD_NAME_COMMAND_NAME,
+			Description: "Suggests a thread title for this thread based on distinctive words in this thread",
 		},
 	}
 )

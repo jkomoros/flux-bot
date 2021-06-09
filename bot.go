@@ -148,9 +148,34 @@ func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.Interacti
 	switch event.Interaction.Data.Name {
 	case ARCHIVE_COMMAND_NAME:
 		b.archiveThreadInteraction(s, event)
+	case SUGGEST_THREAD_NAME_COMMAND_NAME:
+		b.suggestThreadNameInteraction(s, event)
 	default:
 		fmt.Println("Unknown interaction name: " + event.Interaction.Data.Name)
 	}
+}
+
+func (b *bot) suggestThreadNameInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {
+	idf := b.idfs[event.GuildID]
+	if idf == nil {
+		s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionApplicationCommandResponseData{
+				Content: "Couldn't find the IDF index for that channel",
+			},
+		})
+		return
+	}
+
+	//TODO: pick the length automatically
+	topWords := idf.ChannelTFIDF(event.ChannelID).TopWords(3)
+
+	s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionApplicationCommandResponseData{
+			Content: strings.Join(topWords, "-"),
+		},
+	})
 }
 
 func (b *bot) archiveThreadInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {
