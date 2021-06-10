@@ -18,7 +18,6 @@ type bot struct {
 	//guildID -> threadCategoryChannelID -> info
 	infos     map[string]categoryMap
 	infoMutex sync.RWMutex
-	idfs      map[string]*IDFIndex
 }
 
 type threadGroupInfo struct {
@@ -39,15 +38,10 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 		session:    s,
 		controller: c,
 		infos:      make(map[string]categoryMap),
-		idfs:       make(map[string]*IDFIndex),
 	}
 	s.AddHandler(result.ready)
 	s.AddHandler(result.guildCreate)
 	s.AddHandler(result.messageCreate)
-	s.AddHandler(result.messageUpdate)
-	s.AddHandler(result.messageReactionAdd)
-	s.AddHandler(result.messageReactionRemove)
-	s.AddHandler(result.messageReactionRemoveAll)
 	s.AddHandler(result.channelCreate)
 	s.AddHandler(result.channelUpdate)
 	s.AddHandler(result.interactionCreate)
@@ -84,20 +78,15 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 			fmt.Printf("Couldn't archive extra threads on boot: %v", err)
 		}
 	}
-	b.idfs[event.Guild.ID] = IDFIndexForGuild(event.Guild.ID)
-	//Even if there was a disk cached IDF index for the guild, there could have
-	//been messages that came in while bot was not running that need to be
-	//feteched.
-	if err := b.rebuildIDFForGuild(event.Guild.ID); err != nil {
-		fmt.Printf("Couldn't rebuild IDF for guild: %v\n", err)
+	//ensure that an IDF index exists, or build it now so we'll have it if we need it
+	if _, err := IDFIndexForGuild(event.Guild.ID, s); err != nil {
+		fmt.Printf("couldn't fetch idf for guild %v: %v", event.Guild.ID, err)
 	}
+
 }
 
 // discordgo callback: called after the when new message is posted.
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
-	if idf := b.idfs[event.GuildID]; idf != nil {
-		idf.ProcessMessage(event.Message, true)
-	}
 	channel, err := s.State.Channel(event.ChannelID)
 	if err != nil {
 		fmt.Println("Couldn't find channel")
@@ -109,36 +98,6 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 	if err := b.moveThreadToTopOfThreads(channel); err != nil {
 		fmt.Printf("message received in a thread but couldn't move it: %v", err)
 	}
-}
-
-func (b *bot) messageUpdate(s *discordgo.Session, event *discordgo.MessageUpdate) {
-	if idf := b.idfs[event.GuildID]; idf != nil {
-		idf.ProcessMessage(event.Message, true)
-	}
-}
-
-func (b *bot) messageReactionChanged(guildID, channelID, messageID string) {
-	//The emoji reaction message doesn't include the message, so fetch it fresh since state doesn't necessarily have it
-	message, err := b.session.ChannelMessage(channelID, messageID)
-	if err != nil {
-		fmt.Printf("Couldn't fetch message after emoji changed (guild: %v, channel: %v, message: %v): %v", guildID, channelID, messageID, err)
-		return
-	}
-	if idf := b.idfs[guildID]; idf != nil {
-		idf.ProcessMessage(message, true)
-	}
-}
-
-func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
-	b.messageReactionChanged(event.GuildID, event.ChannelID, event.MessageID)
-}
-
-func (b *bot) messageReactionRemove(s *discordgo.Session, event *discordgo.MessageReactionRemove) {
-	b.messageReactionChanged(event.GuildID, event.ChannelID, event.MessageID)
-}
-
-func (b *bot) messageReactionRemoveAll(s *discordgo.Session, event *discordgo.MessageReactionRemoveAll) {
-	b.messageReactionChanged(event.GuildID, event.ChannelID, event.MessageID)
 }
 
 // discordgo callback: called after new channel is created.
@@ -183,19 +142,47 @@ func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.Interacti
 }
 
 func (b *bot) suggestThreadNameInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {
-	idf := b.idfs[event.GuildID]
-	if idf == nil {
+
+	//TODO: respond with a pending response (this might take awhile, although
+	//there shoudl be a fresh IDF cache created when the guild was first seen)
+	idf, err := IDFIndexForGuild(event.GuildID, s)
+
+	if err != nil {
 		s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionApplicationCommandResponseData{
-				Content: "Couldn't find the IDF index for that channel",
+				Content: "Couldn't generate IDF index for channel " + err.Error(),
 			},
 		})
 		return
 	}
 
-	//TODO: pick the length automatically
-	topWords := idf.ChannelTFIDF(event.ChannelID).AutoTopWords(6)
+	channel, err := b.session.State.Channel(event.ChannelID)
+
+	if err != nil {
+		s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionApplicationCommandResponseData{
+				Content: "Couldn't get channel: " + err.Error(),
+			},
+		})
+		return
+	}
+
+	channelMessages, err := FetchAllMessagesForChannel(s, channel)
+
+	if err != nil {
+		s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionApplicationCommandResponseData{
+				Content: "Couldn't fetch channel messages for channel " + err.Error(),
+			},
+		})
+		return
+	}
+
+	tfidf := idf.TFIDFForMessages(channelMessages...)
+	topWords := tfidf.AutoTopWords(6)
 
 	s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -232,86 +219,6 @@ func (b *bot) archiveThreadInteraction(s *discordgo.Session, event *discordgo.In
 			Content: message,
 		},
 	})
-}
-
-func (b *bot) rebuildIDFForGuild(guildID string) error {
-	guild, err := b.session.State.Guild(guildID)
-	if err != nil {
-		return fmt.Errorf("couldn't get guild %v: %w", guildID, err)
-	}
-	fmt.Printf("Rebuilding IDF for Guild %v(%v)\n", guild.Name, guild.ID)
-	for _, channel := range guild.Channels {
-		if err := b.rebuildIDFForChannel(channel); err != nil {
-			return fmt.Errorf("couldn't process channel %v: %w", channel.ID, err)
-		}
-	}
-	fmt.Printf("Done rebuilding IDF for Guild %v(%v)\n", guild.Name, guild.ID)
-	return nil
-}
-
-//This is the max limit in the discord API. Otherwise it defaults to 0
-const MESSAGES_TO_FETCH = 100
-
-//rebuildIDFForChannel fetches all messages for the channel. It stops when it
-//reaches all messages or notices that it's already seen some of the messages.
-//It can be called any time to re-up and verify all messages are downloaded. For
-//example, if you have a JSON cache, and then the bot was stopped, and then more
-//messages came in before the bot was restarted, this would fetch the ones that
-//came in in the intervening time. (Note: currently we DON'T notice if
-//already-fetched messages now have edited content or new emoji reactions)
-func (b *bot) rebuildIDFForChannel(channel *discordgo.Channel) error {
-	//TODO: test this function
-	if channel.Type != discordgo.ChannelTypeGuildText {
-		return nil
-	}
-	if channel.LastMessageID == "" {
-		//No messages in channel at all!
-		return nil
-	}
-	//We'll walk backwards, starting at lastMessageID, and fetching batches of
-	//messages backwards until we run out.
-	idf := b.idfs[channel.GuildID]
-	if idf == nil {
-		return fmt.Errorf("no idf object for guild %v", channel.GuildID)
-	}
-	message, err := b.controller.ChannelMessage(channel.ID, channel.LastMessageID)
-	if err == nil {
-		//If we already have the most recent message we can forgo fetching
-		//anything new, assuming we have everything.
-		if idf.MessageWordIndex(message.ID) != nil {
-			return nil
-		}
-		//It's OK for there to be an error--some channels don't have a starter message anyway
-		idf.ProcessMessage(message, false)
-	}
-	fmt.Printf("Fetching messages for IDF for %v (%v)\n", channel.Name, channel.ID)
-	lastMessageID := channel.LastMessageID
-	continueFetching := true
-	for continueFetching {
-		fmt.Println("Fetching a batch of messages before " + lastMessageID)
-		//lastMessageID will be excluded
-		messages, err := b.controller.ChannelMessages(channel.ID, MESSAGES_TO_FETCH, lastMessageID, "", "")
-		if err != nil {
-			return fmt.Errorf("couldn't fetch messages around %v: %w", lastMessageID, err)
-		}
-		if len(messages) == 0 {
-			break
-		}
-		if len(messages) < MESSAGES_TO_FETCH {
-			//This must have been the last batch to fetch
-			continueFetching = false
-		}
-		for _, message := range messages {
-			//If we've seen the message before then we must have reached where in history we had already fetched to.
-			if !idf.ProvidedViaEvent(message.ID) {
-				continueFetching = false
-			}
-			idf.ProcessMessage(message, false)
-		}
-		//Messages are sorted with most recent first and least recent last.
-		lastMessageID = messages[len(messages)-1].ID
-	}
-	return nil
 }
 
 func (b *bot) setGuildNeedsInfoRegeneration(guildID string) {
@@ -671,11 +578,7 @@ func (g *threadGroupInfo) archiveThread(controller Controller, session *discordg
 
 //Called before the program exits when the bot should clean up, persist state, etc.
 func (b *bot) Close() {
-	for guildID, idfIndex := range b.idfs {
-		if err := idfIndex.PersistIfNecessary(); err != nil {
-			fmt.Printf("Couldn't persist IDF index for %v: %v", guildID, err)
-		}
-	}
+	//nothing to do, idf index is already persisted
 }
 
 func indexForThreadArchive(channel *discordgo.Channel) int {

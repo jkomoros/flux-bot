@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -42,7 +41,7 @@ func init() {
 
 type TFIDF struct {
 	values   map[string]float64
-	messages []*MessageWordIndex
+	messages []*discordgo.Message
 }
 
 func (t *TFIDF) topStemmedWords(count int) []string {
@@ -107,8 +106,8 @@ func (t *TFIDF) TopWords(count int) []string {
 func (t *TFIDF) restemWords(stemmedWords []string) []string {
 	//stemmedWord --> restemmedWord -> count
 	restemCandidates := make(map[string]map[string]int)
-	for _, index := range t.messages {
-		subRestemMap := restemsForContent(index.Message.Content)
+	for _, message := range t.messages {
+		subRestemMap := restemsForContent(message.Content)
 		for stemmedWord, subMap := range subRestemMap {
 			if _, ok := restemCandidates[stemmedWord]; !ok {
 				restemCandidates[stemmedWord] = make(map[string]int)
@@ -141,107 +140,6 @@ func (t *TFIDF) restemWords(stemmedWords []string) []string {
 
 	return result
 
-}
-
-//Effectively a subset of discordgo.Message with only the fields we want.
-type Message struct {
-	ID              string                         `json:"id"`
-	Content         string                         `json:"content"`
-	Timestamp       discordgo.Timestamp            `json:"timestamp"`
-	EditedTimestamp discordgo.Timestamp            `json:"edited_timestamp"`
-	Attachments     []*discordgo.MessageAttachment `json:"attachments"`
-	Reactions       []*discordgo.MessageReactions  `json:"reactions"`
-	Type            discordgo.MessageType          `json:"type"`
-
-	//These are ID fields for the items that would be too large to output multiple times
-	//Author
-	AuthorID string `json:"author_id"`
-	//Mentions
-	MentionUserIDs []string `json:"mention_user_ids"`
-	//MentionChannels
-	MentionChannelIDs []string `json:"mention_channel_ids"`
-}
-
-func messageFromDiscordMessage(input *discordgo.Message) *Message {
-	userIDs := make([]string, 0)
-	for _, user := range input.Mentions {
-		userIDs = append(userIDs, user.ID)
-	}
-	channelIDs := make([]string, 0)
-	for _, channel := range input.MentionChannels {
-		channelIDs = append(channelIDs, channel.ID)
-	}
-	var authorID string
-	if input.Author != nil {
-		authorID = input.Author.ID
-	}
-	return &Message{
-		ID:                input.ID,
-		Content:           input.Content,
-		Timestamp:         input.Timestamp,
-		EditedTimestamp:   input.EditedTimestamp,
-		Attachments:       input.Attachments,
-		Reactions:         input.Reactions,
-		Type:              input.Type,
-		AuthorID:          authorID,
-		MentionUserIDs:    userIDs,
-		MentionChannelIDs: channelIDs,
-	}
-}
-
-type MessageWordIndex struct {
-	Message *Message `json:"message"`
-	//stemmed word -> wordCount
-	WordCounts map[string]int `json:"wordCounts"`
-}
-
-//joinTFIDF joins multiple TFIDFs together
-func joinTFIDF(tfidf ...*TFIDF) *TFIDF {
-	values := make(map[string]float64)
-	var messages []*MessageWordIndex
-	for _, t := range tfidf {
-		for key, val := range t.values {
-			values[key] += val
-		}
-		messages = append(messages, t.messages...)
-	}
-	return &TFIDF{
-		values:   values,
-		messages: messages,
-	}
-}
-
-var IMPORTANT_REACTIONS = map[string]float64{
-	"🎯": 0.5,
-	"🤯": 1.0,
-	"💎": 1.0,
-	"💯": 0.5,
-}
-
-//Mutiplier is how important this message is, useful to tweak TFIDF. Curently just doubles for each of
-//the special emojis it has. 1.0 is the default
-func (m *MessageWordIndex) Multiplier() float64 {
-	multiplier := 1.0
-	for _, reaction := range m.Message.Reactions {
-		multiplier += IMPORTANT_REACTIONS[reaction.Emoji.Name]
-	}
-	return multiplier
-}
-
-func (m *MessageWordIndex) TFIDF(index *IDFIndex) *TFIDF {
-	values := make(map[string]float64)
-	idf := index.IDF()
-	for word, count := range m.WordCounts {
-		values[word] = idf[word] * float64(count)
-	}
-	multiplier := m.Multiplier()
-	for word := range values {
-		values[word] *= multiplier
-	}
-	return &TFIDF{
-		values:   values,
-		messages: []*MessageWordIndex{m},
-	}
 }
 
 func normalizeWord(input string) string {
@@ -318,27 +216,12 @@ func extractWordsFromContent(input string) []string {
 	return result
 }
 
-func newMessageWordIndex(message *discordgo.Message) *MessageWordIndex {
-	wc := make(map[string]int)
-
-	words := extractWordsFromContent(message.Content)
-
-	for _, word := range words {
-		wc[word] += 1
-	}
-
-	return &MessageWordIndex{
-		Message:    messageFromDiscordMessage(message),
-		WordCounts: wc,
-	}
-}
-
 type idfIndexJSON struct {
-	//messageID --> *MessageWordIndex
-	Messages map[string]*MessageWordIndex `json:"messages"`
-	//channelID --> set of messageID
-	MessagesForChannel map[string]map[string]bool `json:"messageForChannel"`
-	FormatVersion      int                        `json:"formatVersion"`
+	DocumentCount int `json:"documentCount"`
+	//Map of stemmedWord --> number of documents that have that word at least
+	//once
+	DocumentWordCounts map[string]int `json:"documentWordCounts"`
+	FormatVersion      int            `json:"formatVersion"`
 }
 
 //IDFIndex stores information for calculating IDF of a thread. Get a new one
@@ -346,22 +229,15 @@ type idfIndexJSON struct {
 type IDFIndex struct {
 	data    *idfIndexJSON
 	guildID string
-	//messageID --> bool
-	providedViaEvent map[string]bool
-	idf              map[string]float64
-	//set if there are changes made since the last time we persisted
-	dirty         bool
-	autoSaveTimer *time.Timer
-	rwMutex       sync.RWMutex
 }
 
 //IDFIndexForGuild returns either a preexisting IDF index from disk cache or a
 //fresh one.z
-func IDFIndexForGuild(guildID string) *IDFIndex {
+func IDFIndexForGuild(guildID string, session *discordgo.Session) (*IDFIndex, error) {
 	if result := LoadIDFIndex(guildID); result != nil {
-		return result
+		return result, nil
 	}
-	return NewIDFIndex(guildID)
+	return BuildIDFIndex(guildID, session)
 }
 
 func LoadIDFIndex(guildID string) *IDFIndex {
@@ -386,72 +262,95 @@ func LoadIDFIndex(guildID string) *IDFIndex {
 	}
 	fmt.Printf("Reloading guild IDF cachce for %v\n", guildID)
 	return &IDFIndex{
-		data:             &result,
-		guildID:          guildID,
-		providedViaEvent: make(map[string]bool),
-		idf:              nil,
+		data:    &result,
+		guildID: guildID,
 	}
 }
 
-func NewIDFIndex(guildID string) *IDFIndex {
+//This is the max limit in the discord API. Otherwise it defaults to 0
+const MESSAGES_TO_FETCH = 100
+
+func FetchAllMessagesForChannel(session *discordgo.Session, channel *discordgo.Channel) ([]*discordgo.Message, error) {
+	//TODO: test this function
+	var result []*discordgo.Message
+
+	//We'll walk backwards, starting at lastMessageID, and fetching batches of
+	//messages backwards until we run out.
+	message, err := session.ChannelMessage(channel.ID, channel.LastMessageID)
+	if err == nil {
+		result = append(result, message)
+	}
+	//It's OK for there to be an error--some channels don't have a starter message anyway
+	fmt.Printf("Fetching messages for IDF for %v (%v)\n", channel.Name, channel.ID)
+	lastMessageID := channel.LastMessageID
+	continueFetching := true
+	for continueFetching {
+		fmt.Println("Fetching a batch of messages before " + lastMessageID)
+		//lastMessageID will be excluded
+		messages, err := session.ChannelMessages(channel.ID, MESSAGES_TO_FETCH, lastMessageID, "", "")
+		if err != nil {
+			return nil, fmt.Errorf("couldn't fetch messages around %v: %w", lastMessageID, err)
+		}
+		if len(messages) == 0 {
+			break
+		}
+		if len(messages) < MESSAGES_TO_FETCH {
+			//This must have been the last batch to fetch
+			continueFetching = false
+		}
+		result = append(result, messages...)
+		//Messages are sorted with most recent first and least recent last.
+		lastMessageID = messages[len(messages)-1].ID
+	}
+	return result, nil
+}
+
+func newIDFIndex(guildID string) *IDFIndex {
 	data := &idfIndexJSON{
-		Messages:           make(map[string]*MessageWordIndex),
-		MessagesForChannel: make(map[string]map[string]bool),
+		DocumentCount:      0,
+		DocumentWordCounts: make(map[string]int),
 		FormatVersion:      IDF_JSON_FORMAT_VERSION,
 	}
 	return &IDFIndex{
-		data:             data,
-		guildID:          guildID,
-		providedViaEvent: make(map[string]bool),
-		//deliberately don't set idf, to signal it needs to be rebuilt.
+		data:    data,
+		guildID: guildID,
 	}
 }
 
-//Returns true if there's state not yet persisted
-func (i *IDFIndex) NeedsPersistence() bool {
-	if i.dirty {
-		return true
-	}
-	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
-	path := filepath.Join(folderPath, i.guildID+".json")
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return true
-	}
-	return false
-}
+func BuildIDFIndex(guildID string, session *discordgo.Session) (*IDFIndex, error) {
 
-func (i *IDFIndex) PersistIfNecessary() error {
-	if !i.NeedsPersistence() {
-		return nil
-	}
-	return i.Persist()
-}
+	result := newIDFIndex(guildID)
 
-func (i *IDFIndex) setNeedsPersistence() {
-	i.dirty = true
-	if i.autoSaveTimer != nil {
-		return
+	guild, err := session.State.Guild(guildID)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't fetch guild from state: %v", err)
 	}
-	i.autoSaveTimer = time.AfterFunc(AUTO_SAVE_INTERVAL, i.autoSave)
-}
+	fmt.Printf("Rebuilding IDF for Guild %v(%v)\n", guild.Name, guild.ID)
+	for _, channel := range guild.Channels {
+		if channel.Type != discordgo.ChannelTypeGuildText {
+			continue
+		}
+		if channel.LastMessageID == "" {
+			//No messages in channel at all!
+			continue
+		}
+		messages, err := FetchAllMessagesForChannel(session, channel)
+		if err != nil {
+			return nil, fmt.Errorf("couldn't fetch messages for channel %v: %v", channel.ID, err)
+		}
+		for _, message := range messages {
+			result.ProcessMessage(message)
+		}
+	}
+	fmt.Printf("Done rebuilding IDF for Guild %v(%v)\n", guild.Name, guild.ID)
 
-func (i *IDFIndex) setPersisted() {
-	i.dirty = false
-	if i.autoSaveTimer != nil {
-		i.autoSaveTimer.Stop()
-		i.autoSaveTimer = nil
+	//Save this so we don't have to do it again later
+	if err := result.Persist(); err != nil {
+		//This is not a problem to report that widely
+		fmt.Printf("couldn't persist idf index for guildID %v: %v", guildID, err)
 	}
-}
 
-func (i *IDFIndex) autoSave() {
-	//Don't print the autosave message unless we're actually persisting.
-	if !i.NeedsPersistence() {
-		return
-	}
-	fmt.Printf("Autosaving index for guild %v\n", i.guildID)
-	if err := i.PersistIfNecessary(); err != nil {
-		fmt.Printf("Error: couldn't autosave: %v\n", err)
-	}
+	return result, nil
 }
 
 //Persist persists the cache to disk. Load it back up later with guildID.
@@ -461,9 +360,7 @@ func (i *IDFIndex) Persist() error {
 	}
 	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
 	path := filepath.Join(folderPath, i.guildID+".json")
-	i.rwMutex.RLock()
 	blob, err := json.MarshalIndent(i.data, "", "\t")
-	i.rwMutex.RUnlock()
 	if err != nil {
 		return fmt.Errorf("couldnt format json: %w", err)
 	}
@@ -472,62 +369,21 @@ func (i *IDFIndex) Persist() error {
 			return fmt.Errorf("couldn't create cache folder: %w", err)
 		}
 	}
-	i.setPersisted()
 	return ioutil.WriteFile(path, blob, 0644)
 }
 
-//Returns the Inverse Document Frequencey for the word in the corpus. Word may
-//be stemmed or unstemmed.
-func (i *IDFIndex) IDFForWord(word string) float64 {
-	word = normalizeWord(word)
-	return i.IDF()[word]
-}
-
-func (i *IDFIndex) IDF() map[string]float64 {
-	if i.idf == nil {
-		i.rebuildIDF()
-	}
-	return i.idf
-}
-
-func (i *IDFIndex) rebuildIDF() {
-	//for each word, the number of messages that contain the word at least once.
-	corpusWords := make(map[string]int)
-	for _, messageIndex := range i.data.Messages {
-		for word := range messageIndex.WordCounts {
-			corpusWords[word] += 1
-		}
-	}
-	idf := make(map[string]float64)
-
-	numMessages := float64(i.DocumentCount())
-
+func (i *IDFIndex) IDFForStemmedWord(stemmedWord string) float64 {
 	//idf (inverse document frequency) of every word in the corpus. See
 	//https://en.wikipedia.org/wiki/Tf%E2%80%93idf
-	for word, count := range corpusWords {
-		idf[word] = math.Log10(numMessages / (float64(count) + 1))
-	}
-	i.idf = idf
+	return math.Log10(float64(i.data.DocumentCount) / (float64(i.data.DocumentWordCounts[stemmedWord]) + 1))
 }
 
 func (i *IDFIndex) DocumentCount() int {
-	return len(i.data.Messages)
-}
-
-func (i *IDFIndex) MessageWordIndex(messageID string) *MessageWordIndex {
-	return i.data.Messages[messageID]
-}
-
-//ProvidedViaEvent returnst true for messages that were provided from an event (as opposed to being fetched proactively).
-//Messages that were provided via an event since this bot has loaded should NOT be taken as a signal that you've gotten
-//back to already fetched messages.
-func (i *IDFIndex) ProvidedViaEvent(messageID string) bool {
-	return i.providedViaEvent[messageID]
+	return i.data.DocumentCount
 }
 
 //ProcessMessage will process a given message and update the index.
-func (i *IDFIndex) ProcessMessage(message *discordgo.Message, providedViaEvent bool) {
-	//TODO: test this
+func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	if message == nil {
 		return
 	}
@@ -535,26 +391,52 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message, providedViaEvent b
 	if message.Type != discordgo.MessageTypeDefault && message.Type != discordgo.MessageTypeReply {
 		return
 	}
-	//Signal this needs to be reprocessed
-	i.rwMutex.Lock()
-	i.idf = nil
-	i.data.Messages[message.ID] = newMessageWordIndex(message)
-	if _, ok := i.data.MessagesForChannel[message.ChannelID]; !ok {
-		i.data.MessagesForChannel[message.ChannelID] = make(map[string]bool)
+	words := extractWordsFromContent(message.Content)
+
+	wordSet := make(map[string]bool)
+
+	for _, word := range words {
+		wordSet[word] = true
 	}
-	if providedViaEvent {
-		i.providedViaEvent[message.ID] = true
+
+	for word := range wordSet {
+		i.data.DocumentWordCounts[word] += 1
 	}
-	i.data.MessagesForChannel[message.ChannelID][message.ID] = true
-	i.setNeedsPersistence()
-	i.rwMutex.Unlock()
+
+	i.data.DocumentCount++
 }
 
-//Computes a TFIDF sum for all messages in the given channel
-func (i *IDFIndex) ChannelTFIDF(channelID string) *TFIDF {
-	var tfidfs []*TFIDF
-	for messageID := range i.data.MessagesForChannel[channelID] {
-		tfidfs = append(tfidfs, i.data.Messages[messageID].TFIDF(i))
+var IMPORTANT_REACTIONS = map[string]float64{
+	"🎯": 0.5,
+	"🤯": 1.0,
+	"💎": 1.0,
+	"💯": 0.5,
+}
+
+func (i *IDFIndex) TFIDFForMessages(messages ...*discordgo.Message) *TFIDF {
+	tfidf := make(map[string]float64)
+
+	subCounts := make(map[string]float64)
+
+	for _, message := range messages {
+		multiplier := 1.0
+		for _, reaction := range message.Reactions {
+			multiplier += IMPORTANT_REACTIONS[reaction.Emoji.Name]
+		}
+		for _, word := range extractWordsFromContent(message.Content) {
+			subCounts[word] += 1
+		}
+		for word, subCount := range subCounts {
+			tfidf[word] += subCount * multiplier
+		}
 	}
-	return joinTFIDF(tfidfs...)
+
+	for word, value := range tfidf {
+		tfidf[word] = value * i.IDFForStemmedWord(word)
+	}
+
+	return &TFIDF{
+		values:   tfidf,
+		messages: messages,
+	}
 }

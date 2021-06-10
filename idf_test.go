@@ -88,17 +88,21 @@ func TestProcessMessage(t *testing.T) {
 		"is is is a a a a is a the the the the the foo bar rare",
 	}
 	//TODO: are these really reasonable values for those inputs?
-	expectedIDF := map[string]float64{
-		"a":          -0.12493873660829993,
-		"bar":        0,
-		"baz":        0,
-		"blarg":      0.17609125905568124,
-		"diamond":    0.17609125905568124,
-		"foo":        0,
-		"is":         -0.12493873660829993,
-		"procrastin": 0,
-		"rare":       0.17609125905568124,
-		"the":        -0.12493873660829993,
+	expectedIDF := &idfIndexJSON{
+		DocumentCount: len(inputs),
+		DocumentWordCounts: map[string]int{
+			"a":          3,
+			"bar":        2,
+			"baz":        2,
+			"blarg":      1,
+			"diamond":    1,
+			"foo":        2,
+			"is":         3,
+			"procrastin": 2,
+			"rare":       1,
+			"the":        3,
+		},
+		FormatVersion: IDF_JSON_FORMAT_VERSION,
 	}
 	var messages []*discordgo.Message
 	for i, input := range inputs {
@@ -109,19 +113,16 @@ func TestProcessMessage(t *testing.T) {
 			ChannelID: "DefaultChannel",
 		})
 	}
-	index := NewIDFIndex("invalid_guild_id")
+	index := newIDFIndex("invalid_guild_id")
 	for _, message := range messages {
-		index.ProcessMessage(message, false)
+		index.ProcessMessage(message)
 	}
 	if index.DocumentCount() != len(inputs) {
 		t.Errorf("Incorrect number of messages. Got %v, expected %v", index.DocumentCount(), len(inputs))
 	}
-	idf := index.IDF()
-	assert.For(t).ThatActual(idf).Equals(expectedIDF).ThenDiffOnFail()
+	assert.For(t).ThatActual(index.data).Equals(expectedIDF).ThenDiffOnFail()
 
-	messageIndex := index.MessageWordIndex("Message 1")
-	assert.For(t).ThatActual(messageIndex).IsNotNil()
-	tfidf := messageIndex.TFIDF(index)
+	tfidf := index.TFIDFForMessages(messages[1])
 	expectedTFIDF := &TFIDF{
 		values: map[string]float64{
 			"a":          -0.12493873660829993,
@@ -132,34 +133,26 @@ func TestProcessMessage(t *testing.T) {
 			"procrastin": 0,
 			"the":        -0.12493873660829993,
 		},
-		messages: []*MessageWordIndex{index.data.Messages["Message 1"]},
+		messages: []*discordgo.Message{messages[1]},
 	}
 	assert.For(t).ThatActual(tfidf).Equals(expectedTFIDF)
 
 	expectedChannelTFIDF := &TFIDF{
 		values: map[string]float64{
-			"a":          -0.8745711562580996,
+			"a":          -1.2493873660829993,
 			"bar":        0,
 			"baz":        0,
-			"blarg":      0.17609125905568124,
-			"diamond":    0.17609125905568124,
+			"blarg":      0.3521825181113625,
+			"diamond":    0.3521825181113625,
 			"foo":        0,
-			"is":         -0.7496324196497997,
+			"is":         -1.1244486294746994,
 			"procrastin": 0,
 			"rare":       0.17609125905568124,
-			"the":        -1.1244486294746994,
+			"the":        -1.999019785732799,
 		},
-		messages: []*MessageWordIndex{
-			index.data.Messages["Message 0"],
-			index.data.Messages["Message 1"],
-			index.data.Messages["Message 2"],
-		},
+		messages: messages,
 	}
-	channelTFIDF := index.ChannelTFIDF("DefaultChannel")
-	//Give messages a stable sort order
-	sort.Slice(channelTFIDF.messages, func(i, j int) bool {
-		return channelTFIDF.messages[i].Message.ID < channelTFIDF.messages[j].Message.ID
-	})
+	channelTFIDF := index.TFIDFForMessages(messages...)
 	assert.For(t).ThatActual(channelTFIDF).Equals(expectedChannelTFIDF).ThenDiffOnFail()
 
 	expectedTopWords := []string{
@@ -174,7 +167,6 @@ func TestProcessMessage(t *testing.T) {
 	expectedAutoTopWords := []string{
 		"blarg",
 		"diamonds",
-		"rare",
 	}
 
 	actualAutoTopWords := channelTFIDF.AutoTopWords(6)

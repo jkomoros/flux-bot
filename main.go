@@ -98,7 +98,7 @@ func main() {
 	// Register ready as a callback for the ready events.
 	bot := newBot(dg, &DiscordController{dg})
 
-	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages | discordgo.IntentsGuildMessageReactions
+	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages
 
 	// Open the websocket and begin listening.
 	err = dg.Open()
