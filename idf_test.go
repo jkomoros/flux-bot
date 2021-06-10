@@ -111,7 +111,7 @@ func TestProcessMessage(t *testing.T) {
 	}
 	index := NewIDFIndex("invalid_guild_id")
 	for _, message := range messages {
-		index.ProcessMessage(message)
+		index.ProcessMessage(message, false)
 	}
 	if index.DocumentCount() != len(inputs) {
 		t.Errorf("Incorrect number of messages. Got %v, expected %v", index.DocumentCount(), len(inputs))

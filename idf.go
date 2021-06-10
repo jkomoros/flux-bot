@@ -346,7 +346,9 @@ type idfIndexJSON struct {
 type IDFIndex struct {
 	data    *idfIndexJSON
 	guildID string
-	idf     map[string]float64
+	//messageID --> bool
+	providedViaEvent map[string]bool
+	idf              map[string]float64
 	//set if there are changes made since the last time we persisted
 	dirty         bool
 	autoSaveTimer *time.Timer
@@ -384,9 +386,10 @@ func LoadIDFIndex(guildID string) *IDFIndex {
 	}
 	fmt.Printf("Reloading guild IDF cachce for %v\n", guildID)
 	return &IDFIndex{
-		data:    &result,
-		guildID: guildID,
-		idf:     nil,
+		data:             &result,
+		guildID:          guildID,
+		providedViaEvent: make(map[string]bool),
+		idf:              nil,
 	}
 }
 
@@ -397,8 +400,9 @@ func NewIDFIndex(guildID string) *IDFIndex {
 		FormatVersion:      IDF_JSON_FORMAT_VERSION,
 	}
 	return &IDFIndex{
-		data:    data,
-		guildID: guildID,
+		data:             data,
+		guildID:          guildID,
+		providedViaEvent: make(map[string]bool),
 		//deliberately don't set idf, to signal it needs to be rebuilt.
 	}
 }
@@ -514,8 +518,15 @@ func (i *IDFIndex) MessageWordIndex(messageID string) *MessageWordIndex {
 	return i.data.Messages[messageID]
 }
 
+//ProvidedViaEvent returnst true for messages that were provided from an event (as opposed to being fetched proactively).
+//Messages that were provided via an event since this bot has loaded should NOT be taken as a signal that you've gotten
+//back to already fetched messages.
+func (i *IDFIndex) ProvidedViaEvent(messageID string) bool {
+	return i.providedViaEvent[messageID]
+}
+
 //ProcessMessage will process a given message and update the index.
-func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
+func (i *IDFIndex) ProcessMessage(message *discordgo.Message, providedViaEvent bool) {
 	//TODO: test this
 	if message == nil {
 		return
@@ -530,6 +541,9 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	i.data.Messages[message.ID] = newMessageWordIndex(message)
 	if _, ok := i.data.MessagesForChannel[message.ChannelID]; !ok {
 		i.data.MessagesForChannel[message.ChannelID] = make(map[string]bool)
+	}
+	if providedViaEvent {
+		i.providedViaEvent[message.ID] = true
 	}
 	i.data.MessagesForChannel[message.ChannelID][message.ID] = true
 	i.setNeedsPersistence()

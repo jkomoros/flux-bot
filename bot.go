@@ -96,7 +96,7 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 // discordgo callback: called after the when new message is posted.
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
 	if idf := b.idfs[event.GuildID]; idf != nil {
-		idf.ProcessMessage(event.Message)
+		idf.ProcessMessage(event.Message, true)
 	}
 	channel, err := s.State.Channel(event.ChannelID)
 	if err != nil {
@@ -113,7 +113,7 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 
 func (b *bot) messageUpdate(s *discordgo.Session, event *discordgo.MessageUpdate) {
 	if idf := b.idfs[event.GuildID]; idf != nil {
-		idf.ProcessMessage(event.Message)
+		idf.ProcessMessage(event.Message, true)
 	}
 }
 
@@ -125,7 +125,7 @@ func (b *bot) messageReactionChanged(guildID, channelID, messageID string) {
 		return
 	}
 	if idf := b.idfs[guildID]; idf != nil {
-		idf.ProcessMessage(message)
+		idf.ProcessMessage(message, true)
 	}
 }
 
@@ -282,7 +282,7 @@ func (b *bot) rebuildIDFForChannel(channel *discordgo.Channel) error {
 			return nil
 		}
 		//It's OK for there to be an error--some channels don't have a starter message anyway
-		idf.ProcessMessage(message)
+		idf.ProcessMessage(message, false)
 	}
 	fmt.Printf("Fetching messages for IDF for %v (%v)\n", channel.Name, channel.ID)
 	lastMessageID := channel.LastMessageID
@@ -303,10 +303,10 @@ func (b *bot) rebuildIDFForChannel(channel *discordgo.Channel) error {
 		}
 		for _, message := range messages {
 			//If we've seen the message before then we must have reached where in history we had already fetched to.
-			if idf.MessageWordIndex(message.ID) != nil {
+			if !idf.ProvidedViaEvent(message.ID) {
 				continueFetching = false
 			}
-			idf.ProcessMessage(message)
+			idf.ProcessMessage(message, false)
 		}
 		//Messages are sorted with most recent first and least recent last.
 		lastMessageID = messages[len(messages)-1].ID
