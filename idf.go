@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/dchest/stemmer/porter2"
@@ -27,8 +26,6 @@ const (
 )
 
 const DEBUG_PRINT = false
-
-const AUTO_SAVE_INTERVAL = 5 * time.Minute
 
 //This number should be incremetned every time the format of the JSON cache
 //changes, so old caches will be discarded.
