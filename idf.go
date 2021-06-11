@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/dchest/stemmer/porter2"
@@ -26,6 +27,10 @@ const (
 )
 
 const DEBUG_PRINT = false
+
+//How long to consider an IDF valid for. If an IDF cache is older than this, it
+//will generate a new one.
+const REBUILD_IDF_INTERVAL = time.Hour * 24
 
 //This number should be incremetned every time the format of the JSON cache
 //changes, so old caches will be discarded.
@@ -240,8 +245,13 @@ func IDFIndexForGuild(guildID string, session *discordgo.Session) (*IDFIndex, er
 func LoadIDFIndex(guildID string) *IDFIndex {
 	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
 	path := filepath.Join(folderPath, guildID+".json")
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if st, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
+	} else {
+		if time.Now().After(st.ModTime().Add(REBUILD_IDF_INTERVAL)) {
+			fmt.Printf("IDF cache was found but it was too old, discarding.\n")
+			return nil
+		}
 	}
 	blob, err := ioutil.ReadFile(path)
 	if err != nil {
