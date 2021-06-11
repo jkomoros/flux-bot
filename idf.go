@@ -343,7 +343,8 @@ func BuildIDFIndex(guildID string, session *discordgo.Session) (*IDFIndex, error
 		}
 		messages, err := FetchAllMessagesForChannel(session, channel)
 		if err != nil {
-			return nil, fmt.Errorf("couldn't fetch messages for channel %v: %v", channel.ID, err)
+			fmt.Printf("couldn't fetch messages for channel %v: %v . Continuing...\n", channel.ID, err)
+			continue
 		}
 		for _, message := range messages {
 			result.ProcessMessage(message)
