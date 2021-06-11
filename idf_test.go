@@ -84,7 +84,7 @@ func TestExtractWordsFromContent(t *testing.T) {
 func TestProcessMessage(t *testing.T) {
 	inputs := []string{
 		"the the the foo bar baz is a procrastinate",
-		"procrastination Procrastinate blarg baz the a is diamonds",
+		"procrastination Procrastinate blarg baz the a is diamonds.",
 		"is is is a a a a is a the the the the the foo bar rare",
 	}
 	//TODO: are these really reasonable values for those inputs?

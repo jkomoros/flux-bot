@@ -272,12 +272,18 @@ func (t *TFIDF) restemWords(stemmedWords []string) []string {
 
 }
 
-func normalizeWord(input string) string {
+//if stem is true will also stem the word
+func normalizeWord(input string, stem bool) string {
 	input = strings.ToLower(input)
 	input = nonAlphaNumericRegExp.ReplaceAllString(input, "")
-	input = porter2.Stemmer.Stem(input)
-	if STOP_WORDS[input] {
+	//STOP_WORDS expects stemmed words so we'll have to check in that map even
+	//if we want the non-stemmed word.
+	stemmed := porter2.Stemmer.Stem(input)
+	if STOP_WORDS[stemmed] {
 		return ""
+	}
+	if stem {
+		return stemmed
 	}
 	return input
 }
@@ -321,14 +327,16 @@ func restemsForContent(input string) map[string]map[string]int {
 	result := make(map[string]map[string]int)
 
 	for _, word := range wordsForString(input) {
-		stemmedWord := normalizeWord(word)
+		//We do want to remove puncuation etc
+		nonStemmedWord := normalizeWord(word, false)
+		stemmedWord := normalizeWord(word, true)
 		if stemmedWord == "" {
 			continue
 		}
 		if _, ok := result[stemmedWord]; !ok {
 			result[stemmedWord] = make(map[string]int)
 		}
-		result[stemmedWord][word] += 1
+		result[stemmedWord][nonStemmedWord] += 1
 	}
 	return result
 }
@@ -341,7 +349,7 @@ func extractWordsFromContent(input string) []string {
 	input = removeMentionsAndURLS(input)
 	var result []string
 	for _, word := range wordsForString(input) {
-		word := normalizeWord(word)
+		word := normalizeWord(word, true)
 		if word == "" {
 			continue
 		}
