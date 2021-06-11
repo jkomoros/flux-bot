@@ -33,6 +33,7 @@ var maxActiveThreads int
 var debugGuildIDForCommand string
 
 const ARCHIVE_COMMAND_NAME = "archive"
+const SUGGEST_THREAD_NAME_COMMAND_NAME = "suggest-thread-name"
 
 var (
 	//When creating a command also update bot.interactionCreate to dispatch to the handler for the interaction
@@ -40,6 +41,10 @@ var (
 		{
 			Name:        ARCHIVE_COMMAND_NAME,
 			Description: "Archive the current thread forcibly (not waiting for it to fall off the end)",
+		},
+		{
+			Name:        SUGGEST_THREAD_NAME_COMMAND_NAME,
+			Description: "Suggests a thread title for this thread based on distinctive words in this thread",
 		},
 	}
 )
@@ -103,8 +108,8 @@ func main() {
 	}
 	defer dg.Close()
 
-	if err = bot.registerSlashCommands(); err != nil {
-		fmt.Printf("Couldn't register slash commands: %v", err)
+	if err = bot.start(); err != nil {
+		fmt.Printf("Couldn't start bot: %v", err)
 		return
 	}
 
@@ -113,4 +118,6 @@ func main() {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
+	//Tell the bot to clean itself up including persisting state
+	bot.Close()
 }

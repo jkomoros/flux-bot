@@ -20,6 +20,14 @@ func (s *sessionWrapper) GetState() *discordgo.State {
 	return s.session.State
 }
 
+func (s *sessionWrapper) ChannelMessage(channelID, messageID string) (st *discordgo.Message, err error) {
+	return s.session.ChannelMessage(channelID, messageID)
+}
+
+func (s *sessionWrapper) ChannelMessages(channelID string, limit int, beforeID, afterID, aroundID string) (st []*discordgo.Message, err error) {
+	return s.session.ChannelMessages(channelID, limit, beforeID, afterID, aroundID)
+}
+
 func (s *sessionWrapper) GuildChannelsReorder(guildID string, channels []*discordgo.Channel) error {
 	return s.session.GuildChannelsReorder(guildID, channels)
 }
@@ -45,6 +53,14 @@ func (s *sessionStubWrapper) AddHandler(handler interface{}) func() {
 
 func (s *sessionStubWrapper) GetState() *discordgo.State {
 	return nil
+}
+
+func (s *sessionStubWrapper) ChannelMessage(channelID, messageID string) (st *discordgo.Message, err error) {
+	return nil, nil
+}
+
+func (s *sessionStubWrapper) ChannelMessages(channelID string, limit int, beforeID, afterID, aroundID string) (st []*discordgo.Message, err error) {
+	return nil, nil
 }
 
 func (s *sessionStubWrapper) GuildChannelsReorder(guildID string, channels []*discordgo.Channel) error {

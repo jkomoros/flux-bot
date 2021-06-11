@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -16,8 +17,9 @@ type bot struct {
 	session    *discordgo.Session
 	controller Controller
 	//guildID -> threadCategoryChannelID -> info
-	infos     map[string]categoryMap
-	infoMutex sync.RWMutex
+	infos           map[string]categoryMap
+	infoMutex       sync.RWMutex
+	rebuildIDFTimer *time.Timer
 }
 
 type threadGroupInfo struct {
@@ -46,6 +48,14 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 	s.AddHandler(result.channelUpdate)
 	s.AddHandler(result.interactionCreate)
 	return result
+}
+
+func (b *bot) start() error {
+	if err := b.registerSlashCommands(); err != nil {
+		return fmt.Errorf("couldn't register slash commands: %v", err)
+	}
+	b.scheduleRebuildIDFCache()
+	return nil
 }
 
 //registerSlashCommands must be called after the bot is already connected
@@ -78,6 +88,11 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 			fmt.Printf("Couldn't archive extra threads on boot: %v", err)
 		}
 	}
+	//ensure that an IDF index exists, or build it now so we'll have it if we need it
+	if _, err := IDFIndexForGuild(event.Guild.ID, s); err != nil {
+		fmt.Printf("couldn't fetch idf for guild %v: %v", event.Guild.ID, err)
+	}
+
 }
 
 // discordgo callback: called after the when new message is posted.
@@ -129,9 +144,78 @@ func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.Interacti
 	switch event.Interaction.Data.Name {
 	case ARCHIVE_COMMAND_NAME:
 		b.archiveThreadInteraction(s, event)
+	case SUGGEST_THREAD_NAME_COMMAND_NAME:
+		b.suggestThreadNameInteraction(s, event)
 	default:
 		fmt.Println("Unknown interaction name: " + event.Interaction.Data.Name)
 	}
+}
+
+func (b *bot) scheduleRebuildIDFCache() {
+	if b.rebuildIDFTimer != nil {
+		b.rebuildIDFTimer.Stop()
+	}
+	//Set up timer to rebuild IDF caches automatically. We run way more often
+	//than the actual interval; if we run too early, it's OK, we'll just load
+	//the cache from disk without rebuilding. Running so often means that we
+	//avoid lots of timing issues where we run _just_ before the cache expires,
+	//meaning we would have waited roughly 2x the expiration interval.
+	b.rebuildIDFTimer = time.AfterFunc(REBUILD_IDF_INTERVAL/16, b.rebuildIDFCaches)
+}
+
+func (b *bot) rebuildIDFCaches() {
+	fmt.Printf("Checking if IDF caches need rebuilding\n")
+	for guildID := range b.infos {
+		if _, err := IDFIndexForGuild(guildID, b.session); err != nil {
+			fmt.Printf("couldn't recreate guild idf for guild %v: %v", guildID, err)
+		}
+	}
+	b.scheduleRebuildIDFCache()
+}
+
+func (b *bot) suggestThreadNameInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {
+
+	//We have to respond to the message within 3 seconds, and it might take
+	//longer to fetch all messages, so we have to do a deferred channel message.
+
+	s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+	})
+
+	idf, err := IDFIndexForGuild(event.GuildID, s)
+
+	if err != nil {
+		s.InteractionResponseEdit(s.State.User.ID, event.Interaction, &discordgo.WebhookEdit{
+			Content: "*Error* Couldn't generate IDF index for channel " + err.Error(),
+		})
+		return
+	}
+
+	channel, err := b.session.State.Channel(event.ChannelID)
+
+	if err != nil {
+		s.InteractionResponseEdit(s.State.User.ID, event.Interaction, &discordgo.WebhookEdit{
+			Content: "*Error* Couldn't get channel: " + err.Error(),
+		})
+		return
+	}
+
+	channelMessages, err := FetchAllMessagesForChannel(s, channel)
+
+	if err != nil {
+		s.InteractionResponseEdit(s.State.User.ID, event.Interaction, &discordgo.WebhookEdit{
+			Content: "*Error* Couldn't fetch channel messages for channel " + err.Error(),
+		})
+		return
+	}
+
+	tfidf := idf.TFIDFForMessages(channelMessages...)
+	topWords := tfidf.AutoTopWords(6)
+
+	s.InteractionResponseEdit(s.State.User.ID, event.Interaction, &discordgo.WebhookEdit{
+		Content: "Suggested thread title: " + strings.Join(topWords, "-"),
+	})
+
 }
 
 func (b *bot) archiveThreadInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {
@@ -516,6 +600,11 @@ func (g *threadGroupInfo) archiveThread(controller Controller, session *discordg
 	// behavior works OK if only one thread is being archived.
 
 	return nil
+}
+
+//Called before the program exits when the bot should clean up, persist state, etc.
+func (b *bot) Close() {
+	//nothing to do, idf index is already persisted
 }
 
 func indexForThreadArchive(channel *discordgo.Channel) int {

@@ -39,6 +39,14 @@ func (tc *TestController) GuildChannelsReorder(guildID string, channels []*disco
 	return nil
 }
 
+func (tc *TestController) ChannelMessage(channelID, messageID string) (st *discordgo.Message, err error) {
+	return nil, nil
+}
+
+func (tc *TestController) ChannelMessages(channelID string, limit int, beforeID, afterID, aroundID string) (st []*discordgo.Message, err error) {
+	return nil, nil
+}
+
 func TestReady(t *testing.T) {
 	session, _ := discordgo.New(TEST_TOKEN)
 	bot := newBot(session, &TestController{})
