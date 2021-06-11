@@ -31,6 +31,7 @@ const EVERYONE_ROLE_NAME = "@everyone"
 var token string
 var maxActiveThreads int
 var debugGuildIDForCommand string
+var useDebugIDFCache bool
 
 const ARCHIVE_COMMAND_NAME = "archive"
 const SUGGEST_THREAD_NAME_COMMAND_NAME = "suggest-thread-name"
@@ -53,6 +54,7 @@ func main() {
 	flag.StringVar(&token, "t", "", "Bot Token")
 	flag.IntVar(&maxActiveThreads, "n", -1, "Max number of threads per group")
 	flag.StringVar(&debugGuildIDForCommand, "debug-guild-id", "", "The guild ID to register commands with, useful during testing since global commands take an hour to roll out")
+	flag.BoolVar(&useDebugIDFCache, "debug-idf-cache", false, "If true, will use a large IDF cache from production instead of rebuilding one")
 	flag.Parse()
 
 	if token == "" {
@@ -62,6 +64,10 @@ func main() {
 	if token == "" {
 		fmt.Println("No token provided. Please run: " + APP_NAME + " -t <bot token> or set env var " + TOKEN_ENV_NAME)
 		return
+	}
+
+	if useDebugIDFCache {
+		fmt.Printf("Will use debug IDF cache at %v for all IDF fetches\n", DEBUG_IDF_CACHE_FILENAME)
 	}
 
 	if maxActiveThreads == -1 {
