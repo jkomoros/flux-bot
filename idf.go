@@ -36,6 +36,134 @@ const REBUILD_IDF_INTERVAL = time.Hour * 24
 //changes, so old caches will be discarded.
 const IDF_JSON_FORMAT_VERSION = 2
 
+//STOP_WORDS are words that are so common that we should basically skip them. We
+//skip them when generating multi-word queries, and also for considering words
+//for ngrams, since these words are so common that if they're considered than a
+//distinctive word + a stop word will show up twice. This stop word list is a
+//lightly processed version of NLTK's english stop word list, from
+//https://gist.github.com/sebleier/554280
+var STOP_WORDS = map[string]bool{
+	"a":        true,
+	"an":       true,
+	"the":      true,
+	"in":       true,
+	"is":       true,
+	"and":      true,
+	"of":       true,
+	"to":       true,
+	"that":     true,
+	"you":      true,
+	"it":       true,
+	"ar":       true,
+	"be":       true,
+	"on":       true,
+	"can":      true,
+	"have":     true,
+	"for":      true,
+	"i":        true,
+	"me":       true,
+	"my":       true,
+	"myself":   true,
+	"we":       true,
+	"our":      true,
+	"ourselv":  true,
+	"your":     true,
+	"yourself": true,
+	"yourselv": true,
+	"he":       true,
+	"him":      true,
+	"hi":       true,
+	"himself":  true,
+	"she":      true,
+	"her":      true,
+	"herself":  true,
+	"itself":   true,
+	"thei":     true,
+	"them":     true,
+	"their":    true,
+	"themselv": true,
+	"what":     true,
+	"which":    true,
+	"who":      true,
+	"whom":     true,
+	"thi":      true,
+	"these":    true,
+	"those":    true,
+	"am":       true,
+	"wa":       true,
+	"were":     true,
+	"been":     true,
+	"ha":       true,
+	"had":      true,
+	"do":       true,
+	"doe":      true,
+	"did":      true,
+	"but":      true,
+	"if":       true,
+	"or":       true,
+	"becaus":   true,
+	"as":       true,
+	"until":    true,
+	"while":    true,
+	"at":       true,
+	"by":       true,
+	"with":     true,
+	"about":    true,
+	"against":  true,
+	"between":  true,
+	"into":     true,
+	"through":  true,
+	"dure":     true,
+	"befor":    true,
+	"after":    true,
+	"abov":     true,
+	"below":    true,
+	"from":     true,
+	"up":       true,
+	"down":     true,
+	"out":      true,
+	"off":      true,
+	"over":     true,
+	"under":    true,
+	"again":    true,
+	"further":  true,
+	"then":     true,
+	"onc":      true,
+	"here":     true,
+	"there":    true,
+	"when":     true,
+	"where":    true,
+	"why":      true,
+	"how":      true,
+	"all":      true,
+	"ani":      true,
+	"both":     true,
+	"each":     true,
+	"few":      true,
+	"more":     true,
+	"most":     true,
+	"other":    true,
+	"some":     true,
+	"such":     true,
+	"no":       true,
+	"nor":      true,
+	"not":      true,
+	"onli":     true,
+	"own":      true,
+	"same":     true,
+	"so":       true,
+	"than":     true,
+	"too":      true,
+	"veri":     true,
+	"s":        true,
+	"t":        true,
+	"will":     true,
+	"just":     true,
+	"don":      true,
+	"should":   true,
+	"now":      true,
+}
+
 func init() {
 	spaceRegExp = regexp.MustCompile(`\s+`)
 	nonAlphaNumericRegExp = regexp.MustCompile("[^a-zA-Z0-9]+")
@@ -145,9 +273,13 @@ func (t *TFIDF) restemWords(stemmedWords []string) []string {
 }
 
 func normalizeWord(input string) string {
+	input = strings.ToLower(input)
 	input = nonAlphaNumericRegExp.ReplaceAllString(input, "")
 	input = porter2.Stemmer.Stem(input)
-	return strings.ToLower(input)
+	if STOP_WORDS[input] {
+		return ""
+	}
+	return input
 }
 
 func removeMentionsAndURLS(input string) string {

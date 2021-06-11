@@ -91,16 +91,13 @@ func TestProcessMessage(t *testing.T) {
 	expectedIDF := &idfIndexJSON{
 		DocumentCount: len(inputs),
 		DocumentWordCounts: map[string]int{
-			"a":          3,
 			"bar":        2,
 			"baz":        2,
 			"blarg":      1,
 			"diamond":    1,
 			"foo":        2,
-			"is":         3,
 			"procrastin": 2,
 			"rare":       1,
-			"the":        3,
 		},
 		FormatVersion: IDF_JSON_FORMAT_VERSION,
 	}
@@ -125,13 +122,10 @@ func TestProcessMessage(t *testing.T) {
 	tfidf := index.TFIDFForMessages(messages[1])
 	expectedTFIDF := &TFIDF{
 		values: map[string]float64{
-			"a":          -0.12493873660829993,
 			"baz":        0,
 			"blarg":      0.17609125905568124,
 			"diamond":    0.17609125905568124,
-			"is":         -0.12493873660829993,
 			"procrastin": 0,
-			"the":        -0.12493873660829993,
 		},
 		messages: []*discordgo.Message{messages[1]},
 	}
@@ -139,16 +133,13 @@ func TestProcessMessage(t *testing.T) {
 
 	expectedChannelTFIDF := &TFIDF{
 		values: map[string]float64{
-			"a":          -1.2493873660829993,
 			"bar":        0,
 			"baz":        0,
 			"blarg":      0.3521825181113625,
 			"diamond":    0.3521825181113625,
 			"foo":        0,
-			"is":         -1.1244486294746994,
 			"procrastin": 0,
 			"rare":       0.17609125905568124,
-			"the":        -1.999019785732799,
 		},
 		messages: messages,
 	}
