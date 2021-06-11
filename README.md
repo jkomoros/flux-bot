@@ -65,3 +65,8 @@ The production bot is running in a `tmux` session on a Google Cloud VM running U
 ## Permissions
 
 The bot requires admin permissions. (Since it's only used on one server it was specifically designed for that seems OK.)
+
+## Storing a new IDF snapshot
+
+From the root of the project, run:
+`gcloud compute scp --project="gale-x" --zone="us-central1-a" rocket-chat-1:~/.cache/idf/837459005038133279.json snapshots/837459005038133279.json`
