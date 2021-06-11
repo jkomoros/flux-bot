@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -16,8 +17,9 @@ type bot struct {
 	session    *discordgo.Session
 	controller Controller
 	//guildID -> threadCategoryChannelID -> info
-	infos     map[string]categoryMap
-	infoMutex sync.RWMutex
+	infos           map[string]categoryMap
+	infoMutex       sync.RWMutex
+	rebuildIDFTimer *time.Timer
 }
 
 type threadGroupInfo struct {
@@ -52,6 +54,7 @@ func (b *bot) start() error {
 	if err := b.registerSlashCommands(); err != nil {
 		return fmt.Errorf("couldn't register slash commands: %v", err)
 	}
+	b.scheduleRebuildIDFCache()
 	return nil
 }
 
@@ -146,6 +149,28 @@ func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.Interacti
 	default:
 		fmt.Println("Unknown interaction name: " + event.Interaction.Data.Name)
 	}
+}
+
+func (b *bot) scheduleRebuildIDFCache() {
+	if b.rebuildIDFTimer != nil {
+		b.rebuildIDFTimer.Stop()
+	}
+	//Set up timer to rebuild IDF caches automatically. We run way more often
+	//than the actual interval; if we run too early, it's OK, we'll just load
+	//the cache from disk without rebuilding. Running so often means that we
+	//avoid lots of timing issues where we run _just_ before the cache expires,
+	//meaning we would have waited roughly 2x the expiration interval.
+	b.rebuildIDFTimer = time.AfterFunc(REBUILD_IDF_INTERVAL/16, b.rebuildIDFCaches)
+}
+
+func (b *bot) rebuildIDFCaches() {
+	fmt.Printf("Checking if IDF caches need rebuilding\n")
+	for guildID := range b.infos {
+		if _, err := IDFIndexForGuild(guildID, b.session); err != nil {
+			fmt.Printf("couldn't recreate guild idf for guild %v: %v", guildID, err)
+		}
+	}
+	b.scheduleRebuildIDFCache()
 }
 
 func (b *bot) suggestThreadNameInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {
