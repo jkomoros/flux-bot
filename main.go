@@ -108,8 +108,8 @@ func main() {
 	}
 	defer dg.Close()
 
-	if err = bot.registerSlashCommands(); err != nil {
-		fmt.Printf("Couldn't register slash commands: %v", err)
+	if err = bot.start(); err != nil {
+		fmt.Printf("Couldn't start bot: %v", err)
 		return
 	}
 

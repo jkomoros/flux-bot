@@ -48,6 +48,13 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 	return result
 }
 
+func (b *bot) start() error {
+	if err := b.registerSlashCommands(); err != nil {
+		return fmt.Errorf("couldn't register slash commands: %v", err)
+	}
+	return nil
+}
+
 //registerSlashCommands must be called after the bot is already connected
 func (b *bot) registerSlashCommands() error {
 	for _, v := range commands {
