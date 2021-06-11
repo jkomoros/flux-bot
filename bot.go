@@ -175,16 +175,18 @@ func (b *bot) rebuildIDFCaches() {
 
 func (b *bot) suggestThreadNameInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {
 
-	//TODO: respond with a pending response (this might take awhile, although
-	//there shoudl be a fresh IDF cache created when the guild was first seen)
+	//We have to respond to the message within 3 seconds, and it might take
+	//longer to fetch all messages, so we have to do a deferred channel message.
+
+	s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+	})
+
 	idf, err := IDFIndexForGuild(event.GuildID, s)
 
 	if err != nil {
-		s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionApplicationCommandResponseData{
-				Content: "Couldn't generate IDF index for channel " + err.Error(),
-			},
+		s.InteractionResponseEdit(s.State.User.ID, event.Interaction, &discordgo.WebhookEdit{
+			Content: "*Error* Couldn't generate IDF index for channel " + err.Error(),
 		})
 		return
 	}
@@ -192,11 +194,8 @@ func (b *bot) suggestThreadNameInteraction(s *discordgo.Session, event *discordg
 	channel, err := b.session.State.Channel(event.ChannelID)
 
 	if err != nil {
-		s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionApplicationCommandResponseData{
-				Content: "Couldn't get channel: " + err.Error(),
-			},
+		s.InteractionResponseEdit(s.State.User.ID, event.Interaction, &discordgo.WebhookEdit{
+			Content: "*Error* Couldn't get channel: " + err.Error(),
 		})
 		return
 	}
@@ -204,11 +203,8 @@ func (b *bot) suggestThreadNameInteraction(s *discordgo.Session, event *discordg
 	channelMessages, err := FetchAllMessagesForChannel(s, channel)
 
 	if err != nil {
-		s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionApplicationCommandResponseData{
-				Content: "Couldn't fetch channel messages for channel " + err.Error(),
-			},
+		s.InteractionResponseEdit(s.State.User.ID, event.Interaction, &discordgo.WebhookEdit{
+			Content: "*Error* Couldn't fetch channel messages for channel " + err.Error(),
 		})
 		return
 	}
@@ -216,12 +212,10 @@ func (b *bot) suggestThreadNameInteraction(s *discordgo.Session, event *discordg
 	tfidf := idf.TFIDFForMessages(channelMessages...)
 	topWords := tfidf.AutoTopWords(6)
 
-	s.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionApplicationCommandResponseData{
-			Content: strings.Join(topWords, "-"),
-		},
+	s.InteractionResponseEdit(s.State.User.ID, event.Interaction, &discordgo.WebhookEdit{
+		Content: "Suggested thread title: " + strings.Join(topWords, "-"),
 	})
+
 }
 
 func (b *bot) archiveThreadInteraction(s *discordgo.Session, event *discordgo.InteractionCreate) {
