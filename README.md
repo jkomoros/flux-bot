@@ -34,7 +34,7 @@ You now must give your dev bot permission to join your dev Discord server.
 1. Copy your application ID. You can find it in the URL of the page you're looking at, something like `https://discord.com/developers/applications/837831972830576679/information` and use that.
 
 2. visit this URL (replacing the YOUR_APP_ID_HERE) with that app ID:
-https://discord.com/api/oauth2/authorize?client_id=YOUR_APPLICATION_ID_HERE&permissions=2415922192&scope=applications.commands%20bot
+https://discord.com/api/oauth2/authorize?client_id=YOUR_APPLICATION_ID_HERE&permissions=8&scope=applications.commands%20bot
 
 Note that as this bot is developed, you might need to redo this connection if more permissions are ever required.
 
@@ -64,10 +64,4 @@ The production bot is running in a `tmux` session on a Google Cloud VM running U
 
 ## Permissions
 
-(The permissions number might need to be updated if it does more things. You can go to https://discord.com/developers/applications/837831972830576679/bot and use the tool at the bottom to calculate the permissions integer).
-
-Current permissions it requires, in the permissions URL above:
- - Manage Channels
- - View Channels
- - Send Messages
- - Manage Roles
+The bot requires admin permissions. (Since it's only used on one server it was specifically designed for that seems OK.)
