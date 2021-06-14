@@ -168,6 +168,22 @@ func urlForMessage(message *discordgo.Message) string {
 	return "https://discord.com/channels/" + message.GuildID + "/" + message.ChannelID + "/" + message.ID
 }
 
+//messageIsForkOf returns a non-zero-length string of the original message ID if
+//the given message appears to be a forked message
+func messageIsForkOf(message *discordgo.Message) string {
+	if len(message.Embeds) == 0 {
+		return ""
+	}
+	for _, embed := range message.Embeds {
+		if embed.Description != FORKED_MESSAGE_LINK_TEXT {
+			continue
+		}
+		urlPieces := strings.Split(embed.URL, "/")
+		return urlPieces[len(urlPieces)-1]
+	}
+	return ""
+}
+
 func messageEmbedAuthorForMessage(message *discordgo.Message) *discordgo.MessageEmbedAuthor {
 	if message.Author == nil {
 		return nil
@@ -187,7 +203,8 @@ func (b *bot) forkMessage(sourceChannelID, sourceMessageID, targetChannelID stri
 	if err != nil {
 		return fmt.Errorf("couldn't fetch message: %v", err)
 	}
-
+	//Note: if you change this, also change messageIsFork to be able to detect
+	//it!
 	embed := &discordgo.MessageEmbed{
 		Title:       FORKED_MESSAGE_LINK_TEXT,
 		Description: msg.Content,
