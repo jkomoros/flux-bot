@@ -565,6 +565,23 @@ func (i *IDFIndex) NoteForkedMessage(from, to *discordgo.MessageReference) {
 	i.data.ForkedMessageIndex[packedRef] = append(i.data.ForkedMessageIndex[packedRef], packMessageReference(to))
 }
 
+func (i *IDFIndex) MessageForks(channelID, messageID string) []*discordgo.MessageReference {
+	ref := &discordgo.MessageReference{
+		ChannelID: channelID,
+		MessageID: messageID,
+	}
+	packedRef := packMessageReference(ref)
+	forks := i.data.ForkedMessageIndex[packedRef]
+	if len(forks) == 0 {
+		return nil
+	}
+	var result []*discordgo.MessageReference
+	for _, fork := range forks {
+		result = append(result, fork.ToMessageReference())
+	}
+	return result
+}
+
 //ProcessMessage will process a given message and update the index.
 func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	if message == nil {
