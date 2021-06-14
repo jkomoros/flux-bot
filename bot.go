@@ -105,10 +105,11 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 
 // discordgo callback: called after the when new message is posted.
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
-	//calling process message live helps ensure we have a forked map of threads
-	if idf, err := IDFIndexForGuild(event.GuildID, s); err == nil {
-		idf.ProcessMessage(event.Message)
+
+	if err := b.noteAndPersistMessageIfFork(event.Message); err != nil {
+		fmt.Printf("couldn't note and persist forked message: %v", err)
 	}
+
 	channel, err := s.State.Channel(event.ChannelID)
 	if err != nil {
 		fmt.Println("Couldn't find channel")
@@ -235,6 +236,23 @@ func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.Interacti
 	default:
 		fmt.Println("Unknown interaction name: " + event.Interaction.Data.Name)
 	}
+}
+
+func (b *bot) noteAndPersistMessageIfFork(msg *discordgo.Message) error {
+	forkedFrom := messageIsForkOf(msg)
+	if forkedFrom == nil {
+		return nil
+	}
+	fmt.Printf("Indexing %v which appears to be a fork\n", msg.ID)
+	idf, err := IDFIndexForGuild(msg.GuildID, b.session)
+	if err != nil {
+		return fmt.Errorf("couldn't fetch idf: %v", err)
+	}
+	idf.NoteForkedMessage(forkedFrom, msg.Reference())
+	if err := idf.Persist(); err != nil {
+		return fmt.Errorf("couldn't perist idf: %v", err)
+	}
+	return nil
 }
 
 func (b *bot) scheduleRebuildIDFCache() {

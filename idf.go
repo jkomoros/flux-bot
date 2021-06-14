@@ -560,6 +560,11 @@ func (i *IDFIndex) DocumentCount() int {
 	return i.data.DocumentCount
 }
 
+func (i *IDFIndex) NoteForkedMessage(from, to *discordgo.MessageReference) {
+	packedRef := packMessageReference(from)
+	i.data.ForkedMessageIndex[packedRef] = append(i.data.ForkedMessageIndex[packedRef], packMessageReference(to))
+}
+
 //ProcessMessage will process a given message and update the index.
 func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	if message == nil {
@@ -571,8 +576,7 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	}
 
 	if forkedFromMessageRef := messageIsForkOf(message); forkedFromMessageRef != nil {
-		packedRef := packMessageReference(forkedFromMessageRef)
-		i.data.ForkedMessageIndex[packedRef] = append(i.data.ForkedMessageIndex[packedRef], packMessageReference(message.Reference()))
+		i.NoteForkedMessage(forkedFromMessageRef, message.Reference())
 	}
 
 	words := extractWordsFromContent(message.Content)
