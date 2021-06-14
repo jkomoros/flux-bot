@@ -46,6 +46,7 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 	s.AddHandler(result.messageCreate)
 	s.AddHandler(result.channelCreate)
 	s.AddHandler(result.channelUpdate)
+	s.AddHandler(result.messageReactionAdd)
 	s.AddHandler(result.interactionCreate)
 	return result
 }
@@ -137,6 +138,11 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 // single channel whose index changed will get called one at a time.
 func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate) {
 	b.setGuildNeedsInfoRegeneration(event.GuildID)
+}
+
+func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
+	//TODO: do something more subsantive
+	fmt.Printf("Saw message reaction: %v", event.MessageReaction.Emoji.Name)
 }
 
 func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.InteractionCreate) {
