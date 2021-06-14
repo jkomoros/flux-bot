@@ -36,7 +36,7 @@ const REBUILD_IDF_INTERVAL = time.Hour * 24
 
 //This number should be incremetned every time the format of the JSON cache
 //changes, so old caches will be discarded.
-const IDF_JSON_FORMAT_VERSION = 2
+const IDF_JSON_FORMAT_VERSION = 3
 
 //STOP_WORDS are words that are so common that we should basically skip them. We
 //skip them when generating multi-word queries, and also for considering words
@@ -364,8 +364,9 @@ type idfIndexJSON struct {
 	DocumentCount int `json:"documentCount"`
 	//Map of stemmedWord --> number of documents that have that word at least
 	//once
-	DocumentWordCounts map[string]int `json:"documentWordCounts"`
-	FormatVersion      int            `json:"formatVersion"`
+	DocumentWordCounts map[string]int      `json:"documentWordCounts"`
+	FormatVersion      int                 `json:"formatVersion"`
+	ForkedMessageIndex map[string][]string `json:"forkedMessageIndex"`
 }
 
 //IDFIndex stores information for calculating IDF of a thread. Get a new one
@@ -465,6 +466,7 @@ func newIDFIndex(guildID string) *IDFIndex {
 	data := &idfIndexJSON{
 		DocumentCount:      0,
 		DocumentWordCounts: make(map[string]int),
+		ForkedMessageIndex: make(map[string][]string),
 		FormatVersion:      IDF_JSON_FORMAT_VERSION,
 	}
 	return &IDFIndex{
@@ -548,6 +550,11 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	if message.Type != discordgo.MessageTypeDefault && message.Type != discordgo.MessageTypeReply {
 		return
 	}
+
+	if forkedFromMessageID := messageIsForkOf(message); forkedFromMessageID != "" {
+		i.data.ForkedMessageIndex[forkedFromMessageID] = append(i.data.ForkedMessageIndex[forkedFromMessageID], message.ID)
+	}
+
 	words := extractWordsFromContent(message.Content)
 
 	wordSet := make(map[string]bool)

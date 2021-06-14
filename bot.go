@@ -105,6 +105,10 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 
 // discordgo callback: called after the when new message is posted.
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
+	//calling process message live helps ensure we have a forked map of threads
+	if idf, err := IDFIndexForGuild(event.GuildID, s); err == nil {
+		idf.ProcessMessage(event.Message)
+	}
 	channel, err := s.State.Channel(event.ChannelID)
 	if err != nil {
 		fmt.Println("Couldn't find channel")
