@@ -11,6 +11,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+const FORK_THREAD_EMOJI = "🧵"
+
 type categoryMap map[string]*threadGroupInfo
 
 type bot struct {
@@ -141,8 +143,18 @@ func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate
 }
 
 func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
-	//TODO: do something more subsantive
-	fmt.Printf("Saw message reaction: %v", event.MessageReaction.Emoji.Name)
+	switch event.Emoji.Name {
+	case FORK_THREAD_EMOJI:
+		b.forkThreadViaEmoji(event.MessageID)
+	}
+}
+
+func (b *bot) forkThreadViaEmoji(messageID string) {
+	if disableEmojiFork {
+		return
+	}
+	//TODO: do something more substantive
+	fmt.Printf("Forking thread via emoji is not yet supported")
 }
 
 func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.InteractionCreate) {
