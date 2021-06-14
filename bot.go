@@ -211,6 +211,21 @@ func (b *bot) forkMessage(sourceChannelID, sourceMessageID, targetChannelID stri
 	if err != nil {
 		return fmt.Errorf("couldn't fetch message: %v", err)
 	}
+	var emojiDescriptions []string
+	for _, reaction := range msg.Reactions {
+		if reaction.Emoji.Name == FORK_THREAD_EMOJI {
+			continue
+		}
+		emojiDescriptions = append(emojiDescriptions, reaction.Emoji.Name+" : "+strconv.Itoa(reaction.Count))
+	}
+	var fields []*discordgo.MessageEmbedField
+	if len(emojiDescriptions) > 0 {
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:   "Reactions",
+			Value:  strings.Join(emojiDescriptions, "\t"),
+			Inline: true,
+		})
+	}
 	//Note: if you change this, also change messageIsFork to be able to detect
 	//it!
 	embed := &discordgo.MessageEmbed{
@@ -218,6 +233,7 @@ func (b *bot) forkMessage(sourceChannelID, sourceMessageID, targetChannelID stri
 		Description: msg.Content,
 		Author:      messageEmbedAuthorForMessage(msg),
 		URL:         urlForMessage(msg),
+		Fields:      fields,
 	}
 	if _, err := b.session.ChannelMessageSendEmbed(targetChannelID, embed); err != nil {
 		return fmt.Errorf("couldn't send message: %v", err)
