@@ -53,10 +53,6 @@ func (p packedMessageReference) ToMessageReference() *discordgo.MessageReference
 	}
 }
 
-func packMessageReferenceFromMessage(msg *discordgo.Message) packedMessageReference {
-	return packedMessageReference(msg.ChannelID + PACKED_MESSAGE_REFERENCE_DELIMITER + msg.ID)
-}
-
 func packMessageReference(ref *discordgo.MessageReference) packedMessageReference {
 	return packedMessageReference(ref.ChannelID + PACKED_MESSAGE_REFERENCE_DELIMITER + ref.MessageID)
 }
@@ -576,7 +572,7 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 
 	if forkedFromMessageRef := messageIsForkOf(message); forkedFromMessageRef != nil {
 		packedRef := packMessageReference(forkedFromMessageRef)
-		i.data.ForkedMessageIndex[packedRef] = append(i.data.ForkedMessageIndex[packedRef], packMessageReferenceFromMessage(message))
+		i.data.ForkedMessageIndex[packedRef] = append(i.data.ForkedMessageIndex[packedRef], packMessageReference(message.Reference()))
 	}
 
 	words := extractWordsFromContent(message.Content)
