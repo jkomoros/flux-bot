@@ -13,6 +13,11 @@ import (
 
 const FORK_THREAD_EMOJI = "🧵"
 
+//A hard coded temporary constant for a thread to fork to. To be removed once
+//better forking targeting specific channels exists!! Only valid in the Komorama
+//test server!
+const TEMP_FORK_CHANNEL = "839640072613396491"
+
 type categoryMap map[string]*threadGroupInfo
 
 type bot struct {
@@ -145,16 +150,55 @@ func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate
 func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
 	switch event.Emoji.Name {
 	case FORK_THREAD_EMOJI:
-		b.forkThreadViaEmoji(event.MessageID)
+		b.forkThreadViaEmoji(event.ChannelID, event.MessageID)
 	}
 }
 
-func (b *bot) forkThreadViaEmoji(messageID string) {
+func (b *bot) forkThreadViaEmoji(channelID, messageID string) {
 	if disableEmojiFork {
 		return
 	}
-	//TODO: do something more substantive
-	fmt.Printf("Forking thread via emoji is not yet supported")
+	//TODO: don't use a temp_fork_channel
+	if err := b.forkMessage(channelID, messageID, TEMP_FORK_CHANNEL); err != nil {
+		fmt.Printf("Couldn't fork message: %v", err)
+	}
+}
+
+func urlForMessage(message *discordgo.Message) string {
+	return "https://discord.com/channels/" + message.GuildID + "/" + message.ChannelID + "/" + message.ID
+}
+
+func messageEmbedAuthorForMessage(message *discordgo.Message) *discordgo.MessageEmbedAuthor {
+	if message.Author == nil {
+		return nil
+	}
+	return &discordgo.MessageEmbedAuthor{
+		URL:     "https://discord.com/users/" + message.Author.ID,
+		Name:    message.Author.Username,
+		IconURL: message.Author.AvatarURL(""),
+	}
+}
+
+//This is how we'll decide if a message with an embed is a forked message
+const FORKED_MESSAGE_LINK_TEXT = "originally said:"
+
+func (b *bot) forkMessage(sourceChannelID, sourceMessageID, targetChannelID string) error {
+	msg, err := b.session.ChannelMessage(sourceChannelID, sourceMessageID)
+	if err != nil {
+		return fmt.Errorf("couldn't fetch message: %v", err)
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Title:       FORKED_MESSAGE_LINK_TEXT,
+		Description: msg.Content,
+		Author:      messageEmbedAuthorForMessage(msg),
+		URL:         urlForMessage(msg),
+	}
+	if _, err := b.session.ChannelMessageSendEmbed(targetChannelID, embed); err != nil {
+		return fmt.Errorf("couldn't send message: %v", err)
+	}
+	return nil
+
 }
 
 func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.InteractionCreate) {
