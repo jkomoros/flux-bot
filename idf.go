@@ -36,7 +36,30 @@ const REBUILD_IDF_INTERVAL = time.Hour * 24
 
 //This number should be incremetned every time the format of the JSON cache
 //changes, so old caches will be discarded.
-const IDF_JSON_FORMAT_VERSION = 3
+const IDF_JSON_FORMAT_VERSION = 4
+
+type packedMessageReference string
+
+const PACKED_MESSAGE_REFERENCE_DELIMITER = "+"
+
+func (p packedMessageReference) ToMessageReference() *discordgo.MessageReference {
+	parts := strings.Split(string(p), PACKED_MESSAGE_REFERENCE_DELIMITER)
+	if len(parts) != 2 {
+		return nil
+	}
+	return &discordgo.MessageReference{
+		ChannelID: parts[0],
+		MessageID: parts[1],
+	}
+}
+
+func packMessageReferenceFromMessage(msg *discordgo.Message) packedMessageReference {
+	return packedMessageReference(msg.ChannelID + PACKED_MESSAGE_REFERENCE_DELIMITER + msg.ID)
+}
+
+func packMessageReference(ref *discordgo.MessageReference) packedMessageReference {
+	return packedMessageReference(ref.ChannelID + PACKED_MESSAGE_REFERENCE_DELIMITER + ref.MessageID)
+}
 
 //STOP_WORDS are words that are so common that we should basically skip them. We
 //skip them when generating multi-word queries, and also for considering words
@@ -364,9 +387,9 @@ type idfIndexJSON struct {
 	DocumentCount int `json:"documentCount"`
 	//Map of stemmedWord --> number of documents that have that word at least
 	//once
-	DocumentWordCounts map[string]int      `json:"documentWordCounts"`
-	FormatVersion      int                 `json:"formatVersion"`
-	ForkedMessageIndex map[string][]string `json:"forkedMessageIndex"`
+	DocumentWordCounts map[string]int                                      `json:"documentWordCounts"`
+	FormatVersion      int                                                 `json:"formatVersion"`
+	ForkedMessageIndex map[packedMessageReference][]packedMessageReference `json:"forkedMessageIndex"`
 }
 
 //IDFIndex stores information for calculating IDF of a thread. Get a new one
@@ -466,7 +489,7 @@ func newIDFIndex(guildID string) *IDFIndex {
 	data := &idfIndexJSON{
 		DocumentCount:      0,
 		DocumentWordCounts: make(map[string]int),
-		ForkedMessageIndex: make(map[string][]string),
+		ForkedMessageIndex: make(map[packedMessageReference][]packedMessageReference),
 		FormatVersion:      IDF_JSON_FORMAT_VERSION,
 	}
 	return &IDFIndex{
@@ -551,8 +574,9 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 		return
 	}
 
-	if forkedFromMessageID := messageIsForkOf(message); forkedFromMessageID != "" {
-		i.data.ForkedMessageIndex[forkedFromMessageID] = append(i.data.ForkedMessageIndex[forkedFromMessageID], message.ID)
+	if forkedFromMessageRef := messageIsForkOf(message); forkedFromMessageRef != nil {
+		packedRef := packMessageReference(forkedFromMessageRef)
+		i.data.ForkedMessageIndex[packedRef] = append(i.data.ForkedMessageIndex[packedRef], packMessageReferenceFromMessage(message))
 	}
 
 	words := extractWordsFromContent(message.Content)

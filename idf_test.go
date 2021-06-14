@@ -99,7 +99,7 @@ func TestProcessMessage(t *testing.T) {
 			"procrastin": 2,
 			"rare":       1,
 		},
-		ForkedMessageIndex: map[string][]string{},
+		ForkedMessageIndex: map[packedMessageReference][]packedMessageReference{},
 		FormatVersion:      IDF_JSON_FORMAT_VERSION,
 	}
 	var messages []*discordgo.Message

@@ -174,18 +174,21 @@ func urlForMessage(message *discordgo.Message) string {
 
 //messageIsForkOf returns a non-zero-length string of the original message ID if
 //the given message appears to be a forked message
-func messageIsForkOf(message *discordgo.Message) string {
+func messageIsForkOf(message *discordgo.Message) *discordgo.MessageReference {
 	if len(message.Embeds) == 0 {
-		return ""
+		return nil
 	}
 	for _, embed := range message.Embeds {
 		if embed.Title != FORKED_MESSAGE_LINK_TEXT {
 			continue
 		}
 		urlPieces := strings.Split(embed.URL, "/")
-		return urlPieces[len(urlPieces)-1]
+		return &discordgo.MessageReference{
+			ChannelID: urlPieces[len(urlPieces)-2],
+			MessageID: urlPieces[len(urlPieces)-1],
+		}
 	}
-	return ""
+	return nil
 }
 
 func messageEmbedAuthorForMessage(message *discordgo.Message) *discordgo.MessageEmbedAuthor {
