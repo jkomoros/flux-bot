@@ -206,11 +206,7 @@ func messageEmbedAuthorForMessage(message *discordgo.Message) *discordgo.Message
 //This is how we'll decide if a message with an embed is a forked message
 const FORKED_MESSAGE_LINK_TEXT = "originally said:"
 
-func (b *bot) forkMessage(sourceChannelID, sourceMessageID, targetChannelID string) error {
-	msg, err := b.session.ChannelMessage(sourceChannelID, sourceMessageID)
-	if err != nil {
-		return fmt.Errorf("couldn't fetch message: %v", err)
-	}
+func createForkMessageEmbed(msg *discordgo.Message) *discordgo.MessageEmbed {
 	var emojiDescriptions []string
 	for _, reaction := range msg.Reactions {
 		if reaction.Emoji.Name == FORK_THREAD_EMOJI {
@@ -228,13 +224,23 @@ func (b *bot) forkMessage(sourceChannelID, sourceMessageID, targetChannelID stri
 	}
 	//Note: if you change this, also change messageIsFork to be able to detect
 	//it!
-	embed := &discordgo.MessageEmbed{
+	return &discordgo.MessageEmbed{
 		Title:       FORKED_MESSAGE_LINK_TEXT,
 		Description: msg.Content,
 		Author:      messageEmbedAuthorForMessage(msg),
 		URL:         urlForMessage(msg),
 		Fields:      fields,
 	}
+}
+
+func (b *bot) forkMessage(sourceChannelID, sourceMessageID, targetChannelID string) error {
+	msg, err := b.session.ChannelMessage(sourceChannelID, sourceMessageID)
+	if err != nil {
+		return fmt.Errorf("couldn't fetch message: %v", err)
+	}
+
+	embed := createForkMessageEmbed(msg)
+
 	if _, err := b.session.ChannelMessageSendEmbed(targetChannelID, embed); err != nil {
 		return fmt.Errorf("couldn't send message: %v", err)
 	}
