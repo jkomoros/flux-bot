@@ -175,7 +175,7 @@ func messageIsForkOf(message *discordgo.Message) string {
 		return ""
 	}
 	for _, embed := range message.Embeds {
-		if embed.Description != FORKED_MESSAGE_LINK_TEXT {
+		if embed.Title != FORKED_MESSAGE_LINK_TEXT {
 			continue
 		}
 		urlPieces := strings.Split(embed.URL, "/")
