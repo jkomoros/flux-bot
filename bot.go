@@ -26,6 +26,7 @@ type bot struct {
 	//guildID -> threadCategoryChannelID -> info
 	infos           map[string]categoryMap
 	infoMutex       sync.RWMutex
+	indexes         map[string]*IDFIndex
 	rebuildIDFTimer *time.Timer
 }
 
@@ -47,6 +48,7 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 		session:    s,
 		controller: c,
 		infos:      make(map[string]categoryMap),
+		indexes:    make(map[string]*IDFIndex),
 	}
 	s.AddHandler(result.ready)
 	s.AddHandler(result.guildCreate)
@@ -97,17 +99,18 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 		}
 	}
 	//ensure that an IDF index exists, or build it now so we'll have it if we need it
-	if _, err := IDFIndexForGuild(event.Guild.ID, s); err != nil {
+	idf, err := IDFIndexForGuild(event.Guild.ID, s)
+	if err != nil {
 		fmt.Printf("couldn't fetch idf for guild %v: %v", event.Guild.ID, err)
 	}
-
+	b.indexes[event.Guild.ID] = idf
 }
 
 // discordgo callback: called after the when new message is posted.
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
 
-	if err := b.noteAndPersistMessageIfFork(event.Message); err != nil {
-		fmt.Printf("couldn't note and persist forked message: %v", err)
+	if err := b.noteMessageIfFork(event.Message); err != nil {
+		fmt.Printf("couldn't note forked message: %v", err)
 	}
 
 	channel, err := s.State.Channel(event.ChannelID)
@@ -260,20 +263,18 @@ func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.Interacti
 	}
 }
 
-func (b *bot) noteAndPersistMessageIfFork(msg *discordgo.Message) error {
+func (b *bot) noteMessageIfFork(msg *discordgo.Message) error {
 	forkedFrom := messageIsForkOf(msg)
 	if forkedFrom == nil {
 		return nil
 	}
 	fmt.Printf("Indexing %v which appears to be a fork\n", msg.ID)
-	idf, err := IDFIndexForGuild(msg.GuildID, b.session)
+
+	idf, err := b.getLiveIDFIndex(msg.GuildID)
 	if err != nil {
 		return fmt.Errorf("couldn't fetch idf: %v", err)
 	}
 	idf.NoteForkedMessage(forkedFrom, msg.Reference())
-	if err := idf.Persist(); err != nil {
-		return fmt.Errorf("couldn't perist idf: %v", err)
-	}
 	return nil
 }
 
@@ -289,12 +290,31 @@ func (b *bot) scheduleRebuildIDFCache() {
 	b.rebuildIDFTimer = time.AfterFunc(REBUILD_IDF_INTERVAL/16, b.rebuildIDFCaches)
 }
 
+func (b *bot) getLiveIDFIndex(guildID string) (*IDFIndex, error) {
+	result := b.indexes[guildID]
+	if result != nil {
+		return result, nil
+	}
+	result, err := IDFIndexForGuild(guildID, b.session)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't fetch live IDF index: %v", err)
+	}
+	b.indexes[guildID] = result
+	return result, nil
+}
+
 func (b *bot) rebuildIDFCaches() {
 	fmt.Printf("Checking if IDF caches need rebuilding\n")
+
 	for guildID := range b.infos {
-		if _, err := IDFIndexForGuild(guildID, b.session); err != nil {
+		if !IDFIndexForGuildNeedsRebuilding(guildID) && b.indexes[guildID] != nil {
+			continue
+		}
+		idf, err := IDFIndexForGuild(guildID, b.session)
+		if err != nil {
 			fmt.Printf("couldn't recreate guild idf for guild %v: %v", guildID, err)
 		}
+		b.indexes[guildID] = idf
 	}
 	b.scheduleRebuildIDFCache()
 }
