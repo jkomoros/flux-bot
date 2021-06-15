@@ -43,6 +43,14 @@ type byArchiveIndex []*discordgo.Channel
 //Sort in a similar way as the main discord client
 type byDiscordOrder []*discordgo.Channel
 
+func messageReference(guildID, channelID, messageID string) *discordgo.MessageReference {
+	return &discordgo.MessageReference{
+		GuildID:   guildID,
+		ChannelID: channelID,
+		MessageID: messageID,
+	}
+}
+
 func newBot(s *discordgo.Session, c Controller) *bot {
 	result := &bot{
 		session:    s,
@@ -166,34 +174,37 @@ func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate
 }
 
 func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
+	ref := messageReference(event.GuildID, event.ChannelID, event.MessageID)
 	switch event.Emoji.Name {
 	case FORK_THREAD_EMOJI:
-		b.forkThreadViaEmoji(event.GuildID, event.ChannelID, event.MessageID)
+		b.forkThreadViaEmoji(ref)
 	default:
-		if err := b.updateForkedMessagesIfTheyExist(event.GuildID, event.ChannelID, event.MessageID); err != nil {
+		if err := b.updateForkedMessagesIfTheyExist(ref); err != nil {
 			fmt.Printf("Couldn't update forks if they exist: %v", err)
 		}
 	}
 }
 
 func (b *bot) messageReactionRemove(s *discordgo.Session, event *discordgo.MessageReactionRemove) {
-	if err := b.updateForkedMessagesIfTheyExist(event.GuildID, event.ChannelID, event.MessageID); err != nil {
+	ref := messageReference(event.GuildID, event.ChannelID, event.MessageID)
+	if err := b.updateForkedMessagesIfTheyExist(ref); err != nil {
 		fmt.Printf("Couldn't update forks if they exist: %v", err)
 	}
 }
 
 func (b *bot) messageReactionsRemoveAll(s *discordgo.Session, event *discordgo.MessageReactionRemoveAll) {
-	if err := b.updateForkedMessagesIfTheyExist(event.GuildID, event.ChannelID, event.MessageID); err != nil {
+	ref := messageReference(event.GuildID, event.ChannelID, event.MessageID)
+	if err := b.updateForkedMessagesIfTheyExist(ref); err != nil {
 		fmt.Printf("Couldn't update forks if they exist: %v", err)
 	}
 }
 
-func (b *bot) forkThreadViaEmoji(guildID, channelID, messageID string) {
+func (b *bot) forkThreadViaEmoji(ref *discordgo.MessageReference) {
 	if disableEmojiFork {
 		return
 	}
 	//TODO: don't use a temp_fork_channel
-	if err := b.forkMessage(guildID, channelID, messageID, TEMP_FORK_CHANNEL); err != nil {
+	if err := b.forkMessage(ref, TEMP_FORK_CHANNEL); err != nil {
 		fmt.Printf("Couldn't fork message: %v", err)
 	}
 }
@@ -262,24 +273,24 @@ func createForkMessageEmbed(msg *discordgo.Message) *discordgo.MessageEmbed {
 	}
 }
 
-func (b *bot) updateForkedMessagesIfTheyExist(guildID, channelID, messageID string) error {
-	idf, err := b.getLiveIDFIndex(guildID)
+func (b *bot) updateForkedMessagesIfTheyExist(ref *discordgo.MessageReference) error {
+	idf, err := b.getLiveIDFIndex(ref.GuildID)
 	if err != nil {
 		return fmt.Errorf("couldn't get idf in update forked messages if they exist: %v", err)
 	}
-	forks := idf.MessageForks(channelID, messageID)
+	forks := idf.MessageForks(ref.ChannelID, ref.MessageID)
 	if len(forks) == 0 {
 		return nil
 	}
 	//OK, it has forks, we need to fetch the updated message.
-	sourceMessage, err := b.session.ChannelMessage(channelID, messageID)
+	sourceMessage, err := b.session.ChannelMessage(ref.ChannelID, ref.MessageID)
 	if err != nil {
 		return fmt.Errorf("couldn't fetch the raw updated message: %v", err)
 	}
 	//No idea why this is happening, but the Message comes back form
 	//ChannelMessage with a zeroed guildID! Stuff it in for the sake of
 	//downstream stuff...
-	sourceMessage.GuildID = guildID
+	sourceMessage.GuildID = ref.GuildID
 	if err := b.updateForkedMessages(sourceMessage); err != nil {
 		return fmt.Errorf("couldn't update forked messages: %v", err)
 	}
@@ -306,13 +317,13 @@ func (b *bot) updateForkedMessages(sourceMessage *discordgo.Message) error {
 	return nil
 }
 
-func (b *bot) forkMessage(sourceGuildID, sourceChannelID, sourceMessageID, targetChannelID string) error {
-	msg, err := b.session.ChannelMessage(sourceChannelID, sourceMessageID)
+func (b *bot) forkMessage(sourceRef *discordgo.MessageReference, targetChannelID string) error {
+	msg, err := b.session.ChannelMessage(sourceRef.ChannelID, sourceRef.MessageID)
 	if err != nil {
 		return fmt.Errorf("couldn't fetch message: %v", err)
 	}
 	//No idea why ChannelMessage comes back without guildID set??
-	msg.GuildID = sourceGuildID
+	msg.GuildID = sourceRef.GuildID
 
 	embed := createForkMessageEmbed(msg)
 
@@ -323,14 +334,11 @@ func (b *bot) forkMessage(sourceGuildID, sourceChannelID, sourceMessageID, targe
 	message := "Forked to <#" + targetChannelID + ">"
 
 	data := &discordgo.MessageSend{
-		Content: message,
-		Reference: &discordgo.MessageReference{
-			ChannelID: sourceChannelID,
-			MessageID: sourceMessageID,
-		},
+		Content:   message,
+		Reference: sourceRef,
 	}
 
-	if _, err := b.session.ChannelMessageSendComplex(sourceChannelID, data); err != nil {
+	if _, err := b.session.ChannelMessageSendComplex(sourceRef.ChannelID, data); err != nil {
 		return fmt.Errorf("couldn't post read out message for fork: %v", err)
 	}
 
