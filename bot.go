@@ -664,14 +664,18 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 func (b *bot) createNewThreadInDefaultCategory(guildID string, threadName string) (*discordgo.Channel, error) {
 	infos := b.getInfos(guildID)
 	var categoryID string
-	if infos[""] != nil {
-		categoryID = infos[""].threadCategoryID
-	} else {
-		for _, info := range infos {
-			categoryID = info.threadCategoryID
+	//find at least one categoryID, defaulting to the one that is default ""
+	for id, info := range infos {
+		categoryID = id
+		if info.name == "" {
 			break
 		}
 	}
+
+	if categoryID == "" {
+		return nil, fmt.Errorf("thread is no threads category to create a thread in")
+	}
+
 	return b.controller.GuildChannelCreateComplex(guildID, discordgo.GuildChannelCreateData{
 		Name:     threadName,
 		Type:     discordgo.ChannelTypeGuildText,
