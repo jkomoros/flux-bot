@@ -36,7 +36,7 @@ const REBUILD_IDF_INTERVAL = time.Hour * 24
 
 //This number should be incremetned every time the format of the JSON cache
 //changes, so old caches will be discarded.
-const IDF_JSON_FORMAT_VERSION = 4
+const IDF_JSON_FORMAT_VERSION = 5
 
 type packedMessageReference string
 
@@ -386,6 +386,7 @@ type idfIndexJSON struct {
 	DocumentWordCounts map[string]int                                      `json:"documentWordCounts"`
 	FormatVersion      int                                                 `json:"formatVersion"`
 	ForkedMessageIndex map[packedMessageReference][]packedMessageReference `json:"forkedMessageIndex"`
+	GeneratedTimestamp time.Time                                           `json:"generatedTimestamp"`
 }
 
 //IDFIndex stores information for calculating IDF of a thread. Get a new one
@@ -411,23 +412,25 @@ func IDFIndexForGuildNeedsRebuilding(guildID string) bool {
 
 	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
 	path := filepath.Join(folderPath, guildID+".json")
-	if st, err := os.Stat(path); os.IsNotExist(err) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return true
-	} else {
-		if time.Now().After(st.ModTime().Add(REBUILD_IDF_INTERVAL)) {
-			fmt.Printf("IDF cache was found but it was too old, discarding.\n")
-			return true
-		}
+	}
+
+	data := fetchIDFBlob(guildID)
+
+	if data == nil {
+		return true
+	}
+
+	if time.Now().After(data.GeneratedTimestamp.Add(REBUILD_IDF_INTERVAL)) {
+		fmt.Printf("IDF cache was found but it was too old, discarding.\n")
+		return true
 	}
 	return false
 }
 
-func LoadIDFIndex(guildID string) *IDFIndex {
-
-	if IDFIndexForGuildNeedsRebuilding(guildID) {
-		return nil
-	}
-
+//fetchIDFblob fetches the blob with no error checking.
+func fetchIDFBlob(guildID string) *idfIndexJSON {
 	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
 	path := filepath.Join(folderPath, guildID+".json")
 
@@ -441,13 +444,24 @@ func LoadIDFIndex(guildID string) *IDFIndex {
 		fmt.Printf("couldn't unmarshal json for %v: %v", guildID, err)
 		return nil
 	}
+	return &result
+}
+
+func LoadIDFIndex(guildID string) *IDFIndex {
+
+	if IDFIndexForGuildNeedsRebuilding(guildID) {
+		return nil
+	}
+
+	result := fetchIDFBlob(guildID)
+
 	if result.FormatVersion != IDF_JSON_FORMAT_VERSION {
 		fmt.Printf("%v IDF cache file had old version %v, expected %v, discarding\n", guildID, result.FormatVersion, IDF_JSON_FORMAT_VERSION)
 		return nil
 	}
 	fmt.Printf("Reloading guild IDF cachce for %v\n", guildID)
 	return &IDFIndex{
-		data:    &result,
+		data:    result,
 		guildID: guildID,
 	}
 }
@@ -530,6 +544,8 @@ func BuildIDFIndex(guildID string, session *discordgo.Session) (*IDFIndex, error
 		}
 	}
 	fmt.Printf("Done rebuilding IDF for Guild %v(%v)\n", guild.Name, guild.ID)
+
+	result.data.GeneratedTimestamp = time.Now()
 
 	//Save this so we don't have to do it again later
 	if err := result.Persist(); err != nil {
