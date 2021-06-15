@@ -53,6 +53,7 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 	s.AddHandler(result.ready)
 	s.AddHandler(result.guildCreate)
 	s.AddHandler(result.messageCreate)
+	s.AddHandler(result.messageUpdate)
 	s.AddHandler(result.channelCreate)
 	s.AddHandler(result.channelUpdate)
 	s.AddHandler(result.messageReactionAdd)
@@ -123,6 +124,13 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 	}
 	if err := b.moveThreadToTopOfThreads(channel); err != nil {
 		fmt.Printf("message received in a thread but couldn't move it: %v", err)
+	}
+}
+
+// discordgo callback: called after the when a message is edited
+func (b *bot) messageUpdate(s *discordgo.Session, event *discordgo.MessageUpdate) {
+	if err := b.updateForkedMessages(event.Message); err != nil {
+		fmt.Printf("couldn't update forked messages if any existed: %v", err)
 	}
 }
 
@@ -234,6 +242,26 @@ func createForkMessageEmbed(msg *discordgo.Message) *discordgo.MessageEmbed {
 		URL:         urlForMessage(msg),
 		Fields:      fields,
 	}
+}
+
+//updates the forked messages that are forks of sourceMessage, if there are any
+func (b *bot) updateForkedMessages(sourceMessage *discordgo.Message) error {
+	idf, err := b.getLiveIDFIndex(sourceMessage.GuildID)
+	if err != nil {
+		return fmt.Errorf("couldn't get idf in message update: %v", err)
+	}
+	forks := idf.MessageForks(sourceMessage.ChannelID, sourceMessage.ID)
+	if len(forks) == 0 {
+		return nil
+	}
+	embed := createForkMessageEmbed(sourceMessage)
+	for _, fork := range forks {
+		if _, err := b.session.ChannelMessageEditEmbed(fork.ChannelID, fork.MessageID, embed); err != nil {
+			return fmt.Errorf("couldn't update forked message for source %v and target %v: %v", sourceMessage.ID, fork.MessageID, err)
+		}
+		fmt.Printf("updated message %v to %v because the message it was forked from (%v) changed", fork.MessageID, sourceMessage.Content, sourceMessage.ID)
+	}
+	return nil
 }
 
 func (b *bot) forkMessage(sourceChannelID, sourceMessageID, targetChannelID string) error {
