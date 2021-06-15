@@ -273,6 +273,23 @@ func createForkMessageEmbed(msg *discordgo.Message) *discordgo.MessageEmbed {
 	}
 }
 
+//channelRef is a wrapper around session.ChannelMessage. The Discord API for
+//some reason omits GuildID for messages fetched via ChannelMessage, but other
+//processing assumes it exists. This method will fetch it but also stuff the
+//GuildID in.
+func (b *bot) channelMessage(ref *discordgo.MessageReference) (*discordgo.Message, error) {
+	//OK, it has forks, we need to fetch the updated message.
+	msg, err := b.session.ChannelMessage(ref.ChannelID, ref.MessageID)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't fetch the raw updated message: %v", err)
+	}
+	//No idea why this is happening, but the Message comes back form
+	//ChannelMessage with a zeroed guildID! Stuff it in for the sake of
+	//downstream stuff...
+	msg.GuildID = ref.GuildID
+	return msg, nil
+}
+
 func (b *bot) updateForkedMessagesIfTheyExist(ref *discordgo.MessageReference) error {
 	idf, err := b.getLiveIDFIndex(ref.GuildID)
 	if err != nil {
@@ -283,14 +300,11 @@ func (b *bot) updateForkedMessagesIfTheyExist(ref *discordgo.MessageReference) e
 		return nil
 	}
 	//OK, it has forks, we need to fetch the updated message.
-	sourceMessage, err := b.session.ChannelMessage(ref.ChannelID, ref.MessageID)
+	sourceMessage, err := b.channelMessage(ref)
 	if err != nil {
 		return fmt.Errorf("couldn't fetch the raw updated message: %v", err)
 	}
-	//No idea why this is happening, but the Message comes back form
-	//ChannelMessage with a zeroed guildID! Stuff it in for the sake of
-	//downstream stuff...
-	sourceMessage.GuildID = ref.GuildID
+
 	if err := b.updateForkedMessages(sourceMessage); err != nil {
 		return fmt.Errorf("couldn't update forked messages: %v", err)
 	}
@@ -318,12 +332,10 @@ func (b *bot) updateForkedMessages(sourceMessage *discordgo.Message) error {
 }
 
 func (b *bot) forkMessage(sourceRef *discordgo.MessageReference, targetChannelID string) error {
-	msg, err := b.session.ChannelMessage(sourceRef.ChannelID, sourceRef.MessageID)
+	msg, err := b.channelMessage(sourceRef)
 	if err != nil {
 		return fmt.Errorf("couldn't fetch message: %v", err)
 	}
-	//No idea why ChannelMessage comes back without guildID set??
-	msg.GuildID = sourceRef.GuildID
 
 	embed := createForkMessageEmbed(msg)
 
