@@ -220,7 +220,7 @@ func (b *bot) forkThreadViaEmojiToNewThread(ref *discordgo.MessageReference) err
 		return fmt.Errorf("couldn't create thread: %v", err)
 	}
 
-	if err := b.forkMessage(ref, thread.ID); err != nil {
+	if err := b.forkMessage(thread.ID, ref); err != nil {
 		return fmt.Errorf("couldn't fork message: %v", err)
 	}
 
@@ -349,26 +349,32 @@ func (b *bot) updateForkedMessages(sourceMessage *discordgo.Message) error {
 	return nil
 }
 
-func (b *bot) forkMessage(sourceRef *discordgo.MessageReference, targetChannelID string) error {
-	msg, err := b.channelMessage(sourceRef)
-	if err != nil {
-		return fmt.Errorf("couldn't fetch message: %v", err)
+func (b *bot) forkMessage(targetChannelID string, sourceRefs ...*discordgo.MessageReference) error {
+	for i, sourceRef := range sourceRefs {
+		//TODO: it is expensive to fetch each of these individually, especially
+		//since likely upstream we have them already.
+		msg, err := b.channelMessage(sourceRef)
+		if err != nil {
+			return fmt.Errorf("couldn't fetch message %v: %v", i, err)
+		}
+
+		embed := createForkMessageEmbed(msg)
+
+		if _, err := b.session.ChannelMessageSendEmbed(targetChannelID, embed); err != nil {
+			return fmt.Errorf("couldn't send message %v: %v", i, err)
+		}
 	}
 
-	embed := createForkMessageEmbed(msg)
-
-	if _, err := b.session.ChannelMessageSendEmbed(targetChannelID, embed); err != nil {
-		return fmt.Errorf("couldn't send message: %v", err)
-	}
+	lastSourceRef := sourceRefs[len(sourceRefs)-1]
 
 	message := "Forked to <#" + targetChannelID + ">"
 
 	data := &discordgo.MessageSend{
 		Content:   message,
-		Reference: sourceRef,
+		Reference: lastSourceRef,
 	}
 
-	if _, err := b.session.ChannelMessageSendComplex(sourceRef.ChannelID, data); err != nil {
+	if _, err := b.session.ChannelMessageSendComplex(lastSourceRef.ChannelID, data); err != nil {
 		return fmt.Errorf("couldn't post read out message for fork: %v", err)
 	}
 
