@@ -13,11 +13,6 @@ import (
 
 const FORK_THREAD_EMOJI = "🧵"
 
-//A hard coded temporary constant for a thread to fork to. To be removed once
-//better forking targeting specific channels exists!! Only valid in the Komorama
-//test server!
-const TEMP_FORK_CHANNEL = "839640072613396491"
-
 type categoryMap map[string]*threadGroupInfo
 
 type bot struct {
@@ -177,7 +172,9 @@ func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageR
 	ref := messageReference(event.GuildID, event.ChannelID, event.MessageID)
 	switch event.Emoji.Name {
 	case FORK_THREAD_EMOJI:
-		b.forkThreadViaEmoji(ref)
+		if err := b.forkThreadViaEmojiToNewThread(ref); err != nil {
+			fmt.Printf("couldn't fork thread: %v\n", err)
+		}
 	default:
 		if err := b.updateForkedMessagesIfTheyExist(ref); err != nil {
 			fmt.Printf("Couldn't update forks if they exist: %v", err)
@@ -199,14 +196,35 @@ func (b *bot) messageReactionsRemoveAll(s *discordgo.Session, event *discordgo.M
 	}
 }
 
-func (b *bot) forkThreadViaEmoji(ref *discordgo.MessageReference) {
+func (b *bot) forkThreadViaEmojiToNewThread(ref *discordgo.MessageReference) error {
 	if disableEmojiFork {
-		return
+		return nil
 	}
-	//TODO: don't use a temp_fork_channel
-	if err := b.forkMessage(ref, TEMP_FORK_CHANNEL); err != nil {
-		fmt.Printf("Couldn't fork message: %v", err)
+
+	msg, err := b.channelMessage(ref)
+	if err != nil {
+		return fmt.Errorf("couldn't fetch full message to fork: %v", err)
 	}
+
+	idf, err := b.getLiveIDFIndex(ref.GuildID)
+	if err != nil {
+		return fmt.Errorf("couldn't fetch live IDF: %v", err)
+	}
+
+	tfidf := idf.TFIDFForMessages(msg)
+
+	title := strings.Join(tfidf.AutoTopWords(6), "-")
+
+	thread, err := b.createNewThreadInDefaultCategory(ref.GuildID, title)
+	if err != nil {
+		return fmt.Errorf("couldn't create thread: %v", err)
+	}
+
+	if err := b.forkMessage(ref, thread.ID); err != nil {
+		return fmt.Errorf("couldn't fork message: %v", err)
+	}
+
+	return nil
 }
 
 func urlForMessage(message *discordgo.Message) string {
