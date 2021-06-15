@@ -392,8 +392,9 @@ type idfIndexJSON struct {
 //IDFIndex stores information for calculating IDF of a thread. Get a new one
 //from NewIDFIndex.
 type IDFIndex struct {
-	data    *idfIndexJSON
-	guildID string
+	data       *idfIndexJSON
+	guildID    string
+	futureSave *time.Timer
 }
 
 //IDFIndexForGuild returns either a preexisting IDF index from disk cache or a
@@ -554,6 +555,23 @@ func BuildIDFIndex(guildID string, session *discordgo.Session) (*IDFIndex, error
 	}
 
 	return result, nil
+}
+
+const AUTO_SAVE_INTERVAL = time.Minute * 5
+
+//Requests a persistence to be done in the near future, batched up so it doesn't happen all that often.
+func (i *IDFIndex) RequestPeristence() {
+	if i.futureSave != nil {
+		return
+	}
+	i.futureSave = time.AfterFunc(AUTO_SAVE_INTERVAL, func() {
+		if err := i.Persist(); err != nil {
+			fmt.Printf("couldn't autosave idf index %v: %v", i.guildID, err)
+		} else {
+			fmt.Printf("Autosaved %v IDF", i.guildID)
+		}
+		i.futureSave = nil
+	})
 }
 
 //Persist persists the cache to disk. Load it back up later with guildID.
