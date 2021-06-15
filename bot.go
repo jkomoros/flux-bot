@@ -57,6 +57,8 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 	s.AddHandler(result.channelCreate)
 	s.AddHandler(result.channelUpdate)
 	s.AddHandler(result.messageReactionAdd)
+	s.AddHandler(result.messageReactionRemove)
+	s.AddHandler(result.messageReactionsRemoveAll)
 	s.AddHandler(result.interactionCreate)
 	return result
 }
@@ -167,6 +169,22 @@ func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageR
 	switch event.Emoji.Name {
 	case FORK_THREAD_EMOJI:
 		b.forkThreadViaEmoji(event.ChannelID, event.MessageID)
+	default:
+		if err := b.updateForkedMessagesIfTheyExist(event.GuildID, event.ChannelID, event.MessageID); err != nil {
+			fmt.Printf("Couldn't update forks if they exist: %v", err)
+		}
+	}
+}
+
+func (b *bot) messageReactionRemove(s *discordgo.Session, event *discordgo.MessageReactionRemove) {
+	if err := b.updateForkedMessagesIfTheyExist(event.GuildID, event.ChannelID, event.MessageID); err != nil {
+		fmt.Printf("Couldn't update forks if they exist: %v", err)
+	}
+}
+
+func (b *bot) messageReactionsRemoveAll(s *discordgo.Session, event *discordgo.MessageReactionRemoveAll) {
+	if err := b.updateForkedMessagesIfTheyExist(event.GuildID, event.ChannelID, event.MessageID); err != nil {
+		fmt.Printf("Couldn't update forks if they exist: %v", err)
 	}
 }
 
@@ -242,6 +260,30 @@ func createForkMessageEmbed(msg *discordgo.Message) *discordgo.MessageEmbed {
 		URL:         urlForMessage(msg),
 		Fields:      fields,
 	}
+}
+
+func (b *bot) updateForkedMessagesIfTheyExist(guildID, channelID, messageID string) error {
+	idf, err := b.getLiveIDFIndex(guildID)
+	if err != nil {
+		return fmt.Errorf("couldn't get idf in update forked messages if they exist: %v", err)
+	}
+	forks := idf.MessageForks(channelID, messageID)
+	if len(forks) == 0 {
+		return nil
+	}
+	//OK, it has forks, we need to fetch the updated message.
+	sourceMessage, err := b.session.ChannelMessage(channelID, messageID)
+	if err != nil {
+		return fmt.Errorf("couldn't fetch the raw updated message: %v", err)
+	}
+	//No idea why this is happening, but the Message comes back form
+	//ChannelMessage with a zeroed guildID! Stuff it in for the sake of
+	//downstream stuff...
+	sourceMessage.GuildID = guildID
+	if err := b.updateForkedMessages(sourceMessage); err != nil {
+		return fmt.Errorf("couldn't update forked messages: %v", err)
+	}
+	return nil
 }
 
 //updates the forked messages that are forks of sourceMessage, if there are any
