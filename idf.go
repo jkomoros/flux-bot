@@ -404,24 +404,33 @@ func IDFIndexForGuild(guildID string, session *discordgo.Session) (*IDFIndex, er
 	return BuildIDFIndex(guildID, session)
 }
 
-func LoadIDFIndex(guildID string) *IDFIndex {
-
-	var path string
-
+func IDFIndexForGuildNeedsRebuilding(guildID string) bool {
 	if useDebugIDFCache {
-		path = DEBUG_IDF_CACHE_FILENAME
+		return false
+	}
+
+	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
+	path := filepath.Join(folderPath, guildID+".json")
+	if st, err := os.Stat(path); os.IsNotExist(err) {
+		return true
 	} else {
-		folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
-		path = filepath.Join(folderPath, guildID+".json")
-		if st, err := os.Stat(path); os.IsNotExist(err) {
-			return nil
-		} else {
-			if time.Now().After(st.ModTime().Add(REBUILD_IDF_INTERVAL)) {
-				fmt.Printf("IDF cache was found but it was too old, discarding.\n")
-				return nil
-			}
+		if time.Now().After(st.ModTime().Add(REBUILD_IDF_INTERVAL)) {
+			fmt.Printf("IDF cache was found but it was too old, discarding.\n")
+			return true
 		}
 	}
+	return false
+}
+
+func LoadIDFIndex(guildID string) *IDFIndex {
+
+	if IDFIndexForGuildNeedsRebuilding(guildID) {
+		return nil
+	}
+
+	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
+	path := filepath.Join(folderPath, guildID+".json")
+
 	blob, err := ioutil.ReadFile(path)
 	if err != nil {
 		fmt.Printf("couldn't read json file for %v: %v", guildID, err)
