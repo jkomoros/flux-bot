@@ -168,7 +168,7 @@ func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate
 func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
 	switch event.Emoji.Name {
 	case FORK_THREAD_EMOJI:
-		b.forkThreadViaEmoji(event.ChannelID, event.MessageID)
+		b.forkThreadViaEmoji(event.GuildID, event.ChannelID, event.MessageID)
 	default:
 		if err := b.updateForkedMessagesIfTheyExist(event.GuildID, event.ChannelID, event.MessageID); err != nil {
 			fmt.Printf("Couldn't update forks if they exist: %v", err)
@@ -188,12 +188,12 @@ func (b *bot) messageReactionsRemoveAll(s *discordgo.Session, event *discordgo.M
 	}
 }
 
-func (b *bot) forkThreadViaEmoji(channelID, messageID string) {
+func (b *bot) forkThreadViaEmoji(guildID, channelID, messageID string) {
 	if disableEmojiFork {
 		return
 	}
 	//TODO: don't use a temp_fork_channel
-	if err := b.forkMessage(channelID, messageID, TEMP_FORK_CHANNEL); err != nil {
+	if err := b.forkMessage(guildID, channelID, messageID, TEMP_FORK_CHANNEL); err != nil {
 		fmt.Printf("Couldn't fork message: %v", err)
 	}
 }
@@ -306,11 +306,13 @@ func (b *bot) updateForkedMessages(sourceMessage *discordgo.Message) error {
 	return nil
 }
 
-func (b *bot) forkMessage(sourceChannelID, sourceMessageID, targetChannelID string) error {
+func (b *bot) forkMessage(sourceGuildID, sourceChannelID, sourceMessageID, targetChannelID string) error {
 	msg, err := b.session.ChannelMessage(sourceChannelID, sourceMessageID)
 	if err != nil {
 		return fmt.Errorf("couldn't fetch message: %v", err)
 	}
+	//No idea why ChannelMessage comes back without guildID set??
+	msg.GuildID = sourceGuildID
 
 	embed := createForkMessageEmbed(msg)
 
