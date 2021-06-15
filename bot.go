@@ -213,7 +213,9 @@ func (b *bot) forkThreadViaEmojiToNewThread(ref *discordgo.MessageReference) err
 		return fmt.Errorf("couldn't fetch previous messages: %v", err)
 	}
 
-	filteredMessages := []*discordgo.Message{msg}
+	var keptMessages []*discordgo.Message
+
+	foundThreadStart := false
 
 	for _, previousMessage := range previousMessages {
 		if previousMessage.Type != discordgo.MessageTypeDefault && previousMessage.Type != discordgo.MessageTypeReply {
@@ -233,11 +235,19 @@ func (b *bot) forkThreadViaEmojiToNewThread(ref *discordgo.MessageReference) err
 		if hasThreadEnd {
 			break
 		}
-		filteredMessages = append(filteredMessages, previousMessage)
+		keptMessages = append(keptMessages, previousMessage)
 		//We've added the last message we were supposed to fork
 		if hasThreadStart {
+			foundThreadStart = true
 			break
 		}
+	}
+
+	filteredMessages := []*discordgo.Message{msg}
+
+	if foundThreadStart {
+		//Only add the other messages before if we found a thread start
+		filteredMessages = append(filteredMessages, keptMessages...)
 	}
 
 	//flip it so older messages are first, and newer messages are at end.
