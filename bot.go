@@ -750,7 +750,12 @@ func (g *threadGroupInfo) archiveThread(controller Controller, session *discordg
 
 //Called before the program exits when the bot should clean up, persist state, etc.
 func (b *bot) Close() {
-	//nothing to do, idf index is already persisted
+	for _, index := range b.indexes {
+		if err := index.Persist(); err != nil {
+			fmt.Printf("Couln't persist IDF %v: %v", index.guildID, err)
+			//Continue on and try to save the other ones too
+		}
+	}
 }
 
 func indexForThreadArchive(channel *discordgo.Channel) int {
