@@ -643,6 +643,24 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 	b.infoMutex.Unlock()
 }
 
+func (b *bot) createNewThreadInDefaultCategory(guildID string, threadName string) (*discordgo.Channel, error) {
+	infos := b.getInfos(guildID)
+	var categoryID string
+	if infos[""] != nil {
+		categoryID = infos[""].threadCategoryID
+	} else {
+		for _, info := range infos {
+			categoryID = info.threadCategoryID
+			break
+		}
+	}
+	return b.controller.GuildChannelCreateComplex(guildID, discordgo.GuildChannelCreateData{
+		Name:     threadName,
+		Type:     discordgo.ChannelTypeGuildText,
+		ParentID: categoryID,
+	})
+}
+
 func numThreadsInCategory(guild *discordgo.Guild, category *discordgo.Channel) int {
 	threads := threadsInCategory(guild, category)
 	if threads == nil {
