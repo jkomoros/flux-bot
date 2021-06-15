@@ -275,6 +275,7 @@ func (b *bot) noteMessageIfFork(msg *discordgo.Message) error {
 		return fmt.Errorf("couldn't fetch idf: %v", err)
 	}
 	idf.NoteForkedMessage(forkedFrom, msg.Reference())
+	idf.RequestPeristence()
 	return nil
 }
 
