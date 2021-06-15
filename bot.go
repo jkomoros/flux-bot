@@ -317,6 +317,21 @@ func (b *bot) forkMessage(sourceChannelID, sourceMessageID, targetChannelID stri
 	if _, err := b.session.ChannelMessageSendEmbed(targetChannelID, embed); err != nil {
 		return fmt.Errorf("couldn't send message: %v", err)
 	}
+
+	message := "Forked to <#" + targetChannelID + ">"
+
+	data := &discordgo.MessageSend{
+		Content: message,
+		Reference: &discordgo.MessageReference{
+			ChannelID: sourceChannelID,
+			MessageID: sourceMessageID,
+		},
+	}
+
+	if _, err := b.session.ChannelMessageSendComplex(sourceChannelID, data); err != nil {
+		return fmt.Errorf("couldn't post read out message for fork: %v", err)
+	}
+
 	return nil
 
 }
