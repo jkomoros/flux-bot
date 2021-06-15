@@ -12,6 +12,7 @@ import (
 )
 
 const FORK_THREAD_EMOJI = "🧵"
+const START_FORK_THREAD_EMOJI = "🪡"
 
 type categoryMap map[string]*threadGroupInfo
 
@@ -206,12 +207,50 @@ func (b *bot) forkThreadViaEmojiToNewThread(ref *discordgo.MessageReference) err
 		return fmt.Errorf("couldn't fetch full message to fork: %v", err)
 	}
 
+	//previousMessages will be most recent to least recent by default
+	previousMessages, err := b.session.ChannelMessages(ref.ChannelID, MESSAGES_TO_FETCH, ref.MessageID, "", "")
+	if err != nil {
+		return fmt.Errorf("couldn't fetch previous messages: %v", err)
+	}
+
+	filteredMessages := []*discordgo.Message{msg}
+
+	for _, previousMessage := range previousMessages {
+		if previousMessage.Type != discordgo.MessageTypeDefault && previousMessage.Type != discordgo.MessageTypeReply {
+			continue
+		}
+		hasThreadStart := false
+		hasThreadEnd := false
+		for _, reaction := range previousMessage.Reactions {
+			if reaction.Emoji.Name == FORK_THREAD_EMOJI {
+				hasThreadEnd = true
+			}
+			if reaction.Emoji.Name == START_FORK_THREAD_EMOJI {
+				hasThreadStart = true
+			}
+		}
+		//If we find another thread end, then there must not be a thread start
+		if hasThreadEnd {
+			break
+		}
+		filteredMessages = append(filteredMessages, previousMessage)
+		//We've added the last message we were supposed to fork
+		if hasThreadStart {
+			break
+		}
+	}
+
+	//flip it so older messages are first, and newer messages are at end.
+	for i, j := 0, len(filteredMessages)-1; i < j; i, j = i+1, j-1 {
+		filteredMessages[i], filteredMessages[j] = filteredMessages[j], filteredMessages[i]
+	}
+
 	idf, err := b.getLiveIDFIndex(ref.GuildID)
 	if err != nil {
 		return fmt.Errorf("couldn't fetch live IDF: %v", err)
 	}
 
-	tfidf := idf.TFIDFForMessages(msg)
+	tfidf := idf.TFIDFForMessages(filteredMessages...)
 
 	title := strings.Join(tfidf.AutoTopWords(6), "-")
 
@@ -220,7 +259,13 @@ func (b *bot) forkThreadViaEmojiToNewThread(ref *discordgo.MessageReference) err
 		return fmt.Errorf("couldn't create thread: %v", err)
 	}
 
-	if err := b.forkMessage(thread.ID, ref); err != nil {
+	refs := make([]*discordgo.MessageReference, len(filteredMessages))
+
+	for i, msg := range filteredMessages {
+		refs[i] = msg.Reference()
+	}
+
+	if err := b.forkMessage(thread.ID, refs...); err != nil {
 		return fmt.Errorf("couldn't fork message: %v", err)
 	}
 
@@ -268,6 +313,9 @@ func createForkMessageEmbed(msg *discordgo.Message) *discordgo.MessageEmbed {
 	var emojiDescriptions []string
 	for _, reaction := range msg.Reactions {
 		if reaction.Emoji.Name == FORK_THREAD_EMOJI {
+			continue
+		}
+		if reaction.Emoji.Name == START_FORK_THREAD_EMOJI {
 			continue
 		}
 		emojiDescriptions = append(emojiDescriptions, reaction.Emoji.Name+" : "+strconv.Itoa(reaction.Count))
