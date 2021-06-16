@@ -449,12 +449,12 @@ func fetchIDFBlob(guildID string) *idfIndexJSON {
 
 	blob, err := ioutil.ReadFile(path)
 	if err != nil {
-		fmt.Printf("couldn't read json file for %v: %v", guildID, err)
+		fmt.Printf("couldn't read json file for %v: %v\n", guildID, err)
 		return nil
 	}
 	var result idfIndexJSON
 	if err := json.Unmarshal(blob, &result); err != nil {
-		fmt.Printf("couldn't unmarshal json for %v: %v", guildID, err)
+		fmt.Printf("couldn't unmarshal json for %v: %v\n", guildID, err)
 		return nil
 	}
 	return &result
@@ -563,7 +563,7 @@ func BuildIDFIndex(guildID string, session *discordgo.Session) (*IDFIndex, error
 	//Save this so we don't have to do it again later
 	if err := result.Persist(); err != nil {
 		//This is not a problem to report that widely
-		fmt.Printf("couldn't persist idf index for guildID %v: %v", guildID, err)
+		fmt.Printf("couldn't persist idf index for guildID %v: %v\n", guildID, err)
 	}
 
 	return result, nil
@@ -578,9 +578,9 @@ func (i *IDFIndex) RequestPeristence() {
 	}
 	i.futureSave = time.AfterFunc(AUTO_SAVE_INTERVAL, func() {
 		if err := i.Persist(); err != nil {
-			fmt.Printf("couldn't autosave idf index %v: %v", i.guildID, err)
+			fmt.Printf("couldn't autosave idf index %v: %v\n", i.guildID, err)
 		} else {
-			fmt.Printf("Autosaved %v IDF", i.guildID)
+			fmt.Printf("Autosaved %v IDF\n", i.guildID)
 		}
 		i.futureSave = nil
 	})

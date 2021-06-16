@@ -559,7 +559,7 @@ func (b *bot) rebuildIDFCaches() {
 		}
 		idf, err := IDFIndexForGuild(guildID, b.session)
 		if err != nil {
-			fmt.Printf("couldn't recreate guild idf for guild %v: %v", guildID, err)
+			fmt.Printf("couldn't recreate guild idf for guild %v: %v\n", guildID, err)
 		}
 		b.indexes[guildID] = idf
 	}
