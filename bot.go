@@ -476,7 +476,13 @@ func (b *bot) forkMessage(targetChannelID string, sourceRefs ...*discordgo.Messa
 
 	lastSourceRef := sourceRefs[len(sourceRefs)-1]
 
-	message := "Forked to <#" + targetChannelID + ">"
+	var message string
+
+	if len(sourceRefs) == 1 {
+		message = "Forked 1 message to <#" + targetChannelID + ">. If you would have marked an earlier message with " + START_FORK_THREAD_EMOJI + " then all of the messages between the two emojis would have been forked."
+	} else {
+		message = "Forked " + strconv.Itoa(len(sourceRefs)) + " messages to <#" + targetChannelID + ">."
+	}
 
 	data := &discordgo.MessageSend{
 		Content:   message,
