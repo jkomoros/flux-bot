@@ -387,6 +387,17 @@ func (b *bot) updateForkedMessagesIfTheyExist(ref *discordgo.MessageReference) e
 	return nil
 }
 
+const NOT_REST_ERROR_CODE = -1
+
+func restErrorCode(err error) int {
+	if e, ok := err.(*discordgo.RESTError); ok {
+		if e.Message != nil {
+			return e.Message.Code
+		}
+	}
+	return NOT_REST_ERROR_CODE
+}
+
 //updates the forked messages that are forks of sourceMessage, if there are any
 func (b *bot) updateForkedMessages(sourceMessage *discordgo.Message) error {
 	idf, err := b.getLiveIDFIndex(sourceMessage.GuildID)
@@ -400,6 +411,11 @@ func (b *bot) updateForkedMessages(sourceMessage *discordgo.Message) error {
 	embed := createForkMessageEmbed(sourceMessage)
 	for _, fork := range forks {
 		if _, err := b.session.ChannelMessageEditEmbed(fork.ChannelID, fork.MessageID, embed); err != nil {
+			if restErrorCode(err) == discordgo.ErrCodeUnknownMessage {
+				//Perhaps the forked message that we saw at some point
+				//has been deleted. That's fine, just skip it!
+				continue
+			}
 			return fmt.Errorf("couldn't update forked message for source %v and target %v: %v", sourceMessage.ID, fork.MessageID, err)
 		}
 		fmt.Printf("updated message %v to %v because the message it was forked from (%v) changed", fork.MessageID, sourceMessage.Content, sourceMessage.ID)
