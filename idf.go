@@ -244,7 +244,7 @@ func (t *TFIDF) AutoTopWords(maxCount int) []string {
 		fmt.Printf("maxDropIndex: %v, total words: %v\n", maxDropIndex, rawWords[:maxDropIndex])
 	}
 
-	if maxDropIndex < len(rawWords) {
+	if maxDropIndex > len(rawWords) {
 		maxDropIndex = len(rawWords)
 	}
 
