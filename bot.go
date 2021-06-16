@@ -58,8 +58,11 @@ func newBot(s *discordgo.Session, c Controller) *bot {
 	s.AddHandler(result.guildCreate)
 	s.AddHandler(result.messageCreate)
 	s.AddHandler(result.messageUpdate)
+	s.AddHandler(result.messageDelete)
+	s.AddHandler(result.messageDeleteBulk)
 	s.AddHandler(result.channelCreate)
 	s.AddHandler(result.channelUpdate)
+	s.AddHandler(result.channelDelete)
 	s.AddHandler(result.messageReactionAdd)
 	s.AddHandler(result.messageReactionRemove)
 	s.AddHandler(result.messageReactionsRemoveAll)
@@ -140,6 +143,28 @@ func (b *bot) messageUpdate(s *discordgo.Session, event *discordgo.MessageUpdate
 	}
 }
 
+// discordgo callback: called after the when a message is edited
+func (b *bot) messageDelete(s *discordgo.Session, event *discordgo.MessageDelete) {
+	idf, err := b.getLiveIDFIndex(event.GuildID)
+	if err != nil {
+		fmt.Printf("couldn't get idf index: %v\n", err)
+		return
+	}
+	idf.NoteMessageDeleted(event.Message.ID)
+}
+
+// discordgo callback: called after the when a message is edited
+func (b *bot) messageDeleteBulk(s *discordgo.Session, event *discordgo.MessageDeleteBulk) {
+	idf, err := b.getLiveIDFIndex(event.GuildID)
+	if err != nil {
+		fmt.Printf("couldn't get idf index: %v\n", err)
+		return
+	}
+	for _, msgID := range event.Messages {
+		idf.NoteMessageDeleted(msgID)
+	}
+}
+
 // discordgo callback: called after new channel is created.
 func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate) {
 	b.setGuildNeedsInfoRegeneration(event.GuildID)
@@ -167,6 +192,16 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 // single channel whose index changed will get called one at a time.
 func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate) {
 	b.setGuildNeedsInfoRegeneration(event.GuildID)
+}
+
+// discordgo callback: called after the when a message is edited
+func (b *bot) channelDelete(s *discordgo.Session, event *discordgo.ChannelDelete) {
+	idf, err := b.getLiveIDFIndex(event.GuildID)
+	if err != nil {
+		fmt.Printf("couldn't get idf index: %v\n", err)
+		return
+	}
+	idf.NoteChannelDeleted(event.Channel.ID)
 }
 
 func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageReactionAdd) {

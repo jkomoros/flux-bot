@@ -42,6 +42,14 @@ type packedMessageReference string
 
 const PACKED_MESSAGE_REFERENCE_DELIMITER = "+"
 
+func (p packedMessageReference) MessageID() string {
+	return strings.Split(string(p), PACKED_MESSAGE_REFERENCE_DELIMITER)[1]
+}
+
+func (p packedMessageReference) ChannelID() string {
+	return strings.Split(string(p), PACKED_MESSAGE_REFERENCE_DELIMITER)[0]
+}
+
 func (p packedMessageReference) ToMessageReference() *discordgo.MessageReference {
 	parts := strings.Split(string(p), PACKED_MESSAGE_REFERENCE_DELIMITER)
 	if len(parts) != 2 {
@@ -605,6 +613,62 @@ func (i *IDFIndex) IDFForStemmedWord(stemmedWord string) float64 {
 
 func (i *IDFIndex) DocumentCount() int {
 	return i.data.DocumentCount
+}
+
+func (i *IDFIndex) NoteMessageDeleted(messageID string) {
+	//Very similar implementation in NoteChannelDeleted
+	for from, tos := range i.data.ForkedMessageIndex {
+		if from.MessageID() == messageID {
+			delete(i.data.ForkedMessageIndex, from)
+			continue
+		}
+		needsDeletion := false
+		for _, to := range tos {
+			if to.MessageID() == messageID {
+				needsDeletion = true
+				break
+			}
+		}
+		if !needsDeletion {
+			continue
+		}
+		var updatedTos []packedMessageReference
+		for _, to := range tos {
+			if to.MessageID() == messageID {
+				continue
+			}
+			updatedTos = append(updatedTos, to)
+		}
+		i.data.ForkedMessageIndex[from] = updatedTos
+	}
+}
+
+func (i *IDFIndex) NoteChannelDeleted(channelID string) {
+	//Very similar implementation in NoteMessageDeleted
+	for from, tos := range i.data.ForkedMessageIndex {
+		if from.ChannelID() == channelID {
+			delete(i.data.ForkedMessageIndex, from)
+			continue
+		}
+		needsDeletion := false
+		for _, to := range tos {
+			if to.ChannelID() == channelID {
+				needsDeletion = true
+				break
+			}
+		}
+		if !needsDeletion {
+			continue
+		}
+		var updatedTos []packedMessageReference
+		for _, to := range tos {
+			if to.ChannelID() == channelID {
+				continue
+			}
+			updatedTos = append(updatedTos, to)
+		}
+		i.data.ForkedMessageIndex[from] = updatedTos
+	}
 }
 
 func (i *IDFIndex) NoteForkedMessage(from, to *discordgo.MessageReference) {
