@@ -11,6 +11,9 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+const FORK_THREAD_EMOJI = "🧵"
+const START_FORK_THREAD_EMOJI = "🪡"
+
 type categoryMap map[string]*threadGroupInfo
 
 type bot struct {
@@ -19,6 +22,7 @@ type bot struct {
 	//guildID -> threadCategoryChannelID -> info
 	infos           map[string]categoryMap
 	infoMutex       sync.RWMutex
+	indexes         map[string]*IDFIndex
 	rebuildIDFTimer *time.Timer
 }
 
@@ -35,17 +39,33 @@ type byArchiveIndex []*discordgo.Channel
 //Sort in a similar way as the main discord client
 type byDiscordOrder []*discordgo.Channel
 
+func messageReference(guildID, channelID, messageID string) *discordgo.MessageReference {
+	return &discordgo.MessageReference{
+		GuildID:   guildID,
+		ChannelID: channelID,
+		MessageID: messageID,
+	}
+}
+
 func newBot(s *discordgo.Session, c Controller) *bot {
 	result := &bot{
 		session:    s,
 		controller: c,
 		infos:      make(map[string]categoryMap),
+		indexes:    make(map[string]*IDFIndex),
 	}
 	s.AddHandler(result.ready)
 	s.AddHandler(result.guildCreate)
 	s.AddHandler(result.messageCreate)
+	s.AddHandler(result.messageUpdate)
+	s.AddHandler(result.messageDelete)
+	s.AddHandler(result.messageDeleteBulk)
 	s.AddHandler(result.channelCreate)
 	s.AddHandler(result.channelUpdate)
+	s.AddHandler(result.channelDelete)
+	s.AddHandler(result.messageReactionAdd)
+	s.AddHandler(result.messageReactionRemove)
+	s.AddHandler(result.messageReactionsRemoveAll)
 	s.AddHandler(result.interactionCreate)
 	return result
 }
@@ -89,14 +109,20 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 		}
 	}
 	//ensure that an IDF index exists, or build it now so we'll have it if we need it
-	if _, err := IDFIndexForGuild(event.Guild.ID, s); err != nil {
+	idf, err := IDFIndexForGuild(event.Guild.ID, s)
+	if err != nil {
 		fmt.Printf("couldn't fetch idf for guild %v: %v", event.Guild.ID, err)
 	}
-
+	b.indexes[event.Guild.ID] = idf
 }
 
 // discordgo callback: called after the when new message is posted.
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
+
+	if err := b.noteMessageIfFork(event.Message); err != nil {
+		fmt.Printf("couldn't note forked message: %v", err)
+	}
+
 	channel, err := s.State.Channel(event.ChannelID)
 	if err != nil {
 		fmt.Println("Couldn't find channel")
@@ -107,6 +133,35 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 	}
 	if err := b.moveThreadToTopOfThreads(channel); err != nil {
 		fmt.Printf("message received in a thread but couldn't move it: %v", err)
+	}
+}
+
+// discordgo callback: called after the when a message is edited
+func (b *bot) messageUpdate(s *discordgo.Session, event *discordgo.MessageUpdate) {
+	if err := b.updateForkedMessages(event.Message); err != nil {
+		fmt.Printf("couldn't update forked messages if any existed: %v", err)
+	}
+}
+
+// discordgo callback: called after the when a message is edited
+func (b *bot) messageDelete(s *discordgo.Session, event *discordgo.MessageDelete) {
+	idf, err := b.getLiveIDFIndex(event.GuildID)
+	if err != nil {
+		fmt.Printf("couldn't get idf index: %v\n", err)
+		return
+	}
+	idf.NoteMessageDeleted(event.Message.ID)
+}
+
+// discordgo callback: called after the when a message is edited
+func (b *bot) messageDeleteBulk(s *discordgo.Session, event *discordgo.MessageDeleteBulk) {
+	idf, err := b.getLiveIDFIndex(event.GuildID)
+	if err != nil {
+		fmt.Printf("couldn't get idf index: %v\n", err)
+		return
+	}
+	for _, msgID := range event.Messages {
+		idf.NoteMessageDeleted(msgID)
 	}
 }
 
@@ -139,6 +194,309 @@ func (b *bot) channelUpdate(s *discordgo.Session, event *discordgo.ChannelUpdate
 	b.setGuildNeedsInfoRegeneration(event.GuildID)
 }
 
+// discordgo callback: called after the when a message is edited
+func (b *bot) channelDelete(s *discordgo.Session, event *discordgo.ChannelDelete) {
+	idf, err := b.getLiveIDFIndex(event.GuildID)
+	if err != nil {
+		fmt.Printf("couldn't get idf index: %v\n", err)
+		return
+	}
+	idf.NoteChannelDeleted(event.Channel.ID)
+}
+
+func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageReactionAdd) {
+	ref := messageReference(event.GuildID, event.ChannelID, event.MessageID)
+	switch event.Emoji.Name {
+	case FORK_THREAD_EMOJI:
+		if err := b.forkThreadViaEmojiToNewThread(ref); err != nil {
+			fmt.Printf("couldn't fork thread: %v\n", err)
+		}
+	default:
+		if err := b.updateForkedMessagesIfTheyExist(ref); err != nil {
+			fmt.Printf("Couldn't update forks if they exist: %v", err)
+		}
+	}
+}
+
+func (b *bot) messageReactionRemove(s *discordgo.Session, event *discordgo.MessageReactionRemove) {
+	ref := messageReference(event.GuildID, event.ChannelID, event.MessageID)
+	if err := b.updateForkedMessagesIfTheyExist(ref); err != nil {
+		fmt.Printf("Couldn't update forks if they exist: %v", err)
+	}
+}
+
+func (b *bot) messageReactionsRemoveAll(s *discordgo.Session, event *discordgo.MessageReactionRemoveAll) {
+	ref := messageReference(event.GuildID, event.ChannelID, event.MessageID)
+	if err := b.updateForkedMessagesIfTheyExist(ref); err != nil {
+		fmt.Printf("Couldn't update forks if they exist: %v", err)
+	}
+}
+
+func (b *bot) forkThreadViaEmojiToNewThread(ref *discordgo.MessageReference) error {
+	if disableEmojiFork {
+		return nil
+	}
+
+	msg, err := b.channelMessage(ref)
+	if err != nil {
+		return fmt.Errorf("couldn't fetch full message to fork: %v", err)
+	}
+
+	//previousMessages will be most recent to least recent by default
+	previousMessages, err := b.session.ChannelMessages(ref.ChannelID, MESSAGES_TO_FETCH, ref.MessageID, "", "")
+	if err != nil {
+		return fmt.Errorf("couldn't fetch previous messages: %v", err)
+	}
+
+	var keptMessages []*discordgo.Message
+
+	foundThreadStart := false
+
+	for _, previousMessage := range previousMessages {
+		if previousMessage.Type != discordgo.MessageTypeDefault && previousMessage.Type != discordgo.MessageTypeReply {
+			continue
+		}
+		hasThreadStart := false
+		hasThreadEnd := false
+		for _, reaction := range previousMessage.Reactions {
+			if reaction.Emoji.Name == FORK_THREAD_EMOJI {
+				hasThreadEnd = true
+			}
+			if reaction.Emoji.Name == START_FORK_THREAD_EMOJI {
+				hasThreadStart = true
+			}
+		}
+		//If we find another thread end, then there must not be a thread start
+		if hasThreadEnd {
+			break
+		}
+		keptMessages = append(keptMessages, previousMessage)
+		//We've added the last message we were supposed to fork
+		if hasThreadStart {
+			foundThreadStart = true
+			break
+		}
+	}
+
+	filteredMessages := []*discordgo.Message{msg}
+
+	if foundThreadStart {
+		//Only add the other messages before if we found a thread start
+		filteredMessages = append(filteredMessages, keptMessages...)
+	}
+
+	//flip it so older messages are first, and newer messages are at end.
+	for i, j := 0, len(filteredMessages)-1; i < j; i, j = i+1, j-1 {
+		filteredMessages[i], filteredMessages[j] = filteredMessages[j], filteredMessages[i]
+	}
+
+	idf, err := b.getLiveIDFIndex(ref.GuildID)
+	if err != nil {
+		return fmt.Errorf("couldn't fetch live IDF: %v", err)
+	}
+
+	tfidf := idf.TFIDFForMessages(filteredMessages...)
+
+	title := strings.Join(tfidf.AutoTopWords(6), "-")
+
+	thread, err := b.createNewThreadInDefaultCategory(ref.GuildID, title)
+	if err != nil {
+		return fmt.Errorf("couldn't create thread: %v", err)
+	}
+
+	refs := make([]*discordgo.MessageReference, len(filteredMessages))
+
+	for i, msg := range filteredMessages {
+		refs[i] = msg.Reference()
+	}
+
+	if err := b.forkMessage(thread.ID, refs...); err != nil {
+		return fmt.Errorf("couldn't fork message: %v", err)
+	}
+
+	return nil
+}
+
+func urlForMessage(message *discordgo.Message) string {
+	return "https://discord.com/channels/" + message.GuildID + "/" + message.ChannelID + "/" + message.ID
+}
+
+//messageIsForkOf returns a non-zero-length string of the original message ID if
+//the given message appears to be a forked message
+func messageIsForkOf(message *discordgo.Message) *discordgo.MessageReference {
+	if len(message.Embeds) == 0 {
+		return nil
+	}
+	for _, embed := range message.Embeds {
+		if embed.Title != FORKED_MESSAGE_LINK_TEXT {
+			continue
+		}
+		urlPieces := strings.Split(embed.URL, "/")
+		return &discordgo.MessageReference{
+			ChannelID: urlPieces[len(urlPieces)-2],
+			MessageID: urlPieces[len(urlPieces)-1],
+		}
+	}
+	return nil
+}
+
+func messageEmbedAuthorForMessage(message *discordgo.Message) *discordgo.MessageEmbedAuthor {
+	if message.Author == nil {
+		return nil
+	}
+	return &discordgo.MessageEmbedAuthor{
+		URL:     "https://discord.com/users/" + message.Author.ID,
+		Name:    message.Author.Username,
+		IconURL: message.Author.AvatarURL(""),
+	}
+}
+
+//This is how we'll decide if a message with an embed is a forked message
+const FORKED_MESSAGE_LINK_TEXT = "originally said:"
+
+func createForkMessageEmbed(msg *discordgo.Message) *discordgo.MessageEmbed {
+	var emojiDescriptions []string
+	for _, reaction := range msg.Reactions {
+		if reaction.Emoji.Name == FORK_THREAD_EMOJI {
+			continue
+		}
+		if reaction.Emoji.Name == START_FORK_THREAD_EMOJI {
+			continue
+		}
+		emojiDescriptions = append(emojiDescriptions, reaction.Emoji.Name+" : "+strconv.Itoa(reaction.Count))
+	}
+	var fields []*discordgo.MessageEmbedField
+	if len(emojiDescriptions) > 0 {
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:   "Reactions",
+			Value:  strings.Join(emojiDescriptions, "\t"),
+			Inline: true,
+		})
+	}
+	//Note: if you change this, also change messageIsFork to be able to detect
+	//it!
+	return &discordgo.MessageEmbed{
+		Title:       FORKED_MESSAGE_LINK_TEXT,
+		Description: msg.Content,
+		Author:      messageEmbedAuthorForMessage(msg),
+		URL:         urlForMessage(msg),
+		Fields:      fields,
+	}
+}
+
+//channelRef is a wrapper around session.ChannelMessage. The Discord API for
+//some reason omits GuildID for messages fetched via ChannelMessage, but other
+//processing assumes it exists. This method will fetch it but also stuff the
+//GuildID in.
+func (b *bot) channelMessage(ref *discordgo.MessageReference) (*discordgo.Message, error) {
+	//OK, it has forks, we need to fetch the updated message.
+	msg, err := b.session.ChannelMessage(ref.ChannelID, ref.MessageID)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't fetch the raw updated message: %v", err)
+	}
+	//No idea why this is happening, but the Message comes back form
+	//ChannelMessage with a zeroed guildID! Stuff it in for the sake of
+	//downstream stuff...
+	msg.GuildID = ref.GuildID
+	return msg, nil
+}
+
+func (b *bot) updateForkedMessagesIfTheyExist(ref *discordgo.MessageReference) error {
+	idf, err := b.getLiveIDFIndex(ref.GuildID)
+	if err != nil {
+		return fmt.Errorf("couldn't get idf in update forked messages if they exist: %v", err)
+	}
+	forks := idf.MessageForks(ref.ChannelID, ref.MessageID)
+	if len(forks) == 0 {
+		return nil
+	}
+	//OK, it has forks, we need to fetch the updated message.
+	sourceMessage, err := b.channelMessage(ref)
+	if err != nil {
+		return fmt.Errorf("couldn't fetch the raw updated message: %v", err)
+	}
+
+	if err := b.updateForkedMessages(sourceMessage); err != nil {
+		return fmt.Errorf("couldn't update forked messages: %v", err)
+	}
+	return nil
+}
+
+const NOT_REST_ERROR_CODE = -1
+
+func restErrorCode(err error) int {
+	if e, ok := err.(*discordgo.RESTError); ok {
+		if e.Message != nil {
+			return e.Message.Code
+		}
+	}
+	return NOT_REST_ERROR_CODE
+}
+
+//updates the forked messages that are forks of sourceMessage, if there are any
+func (b *bot) updateForkedMessages(sourceMessage *discordgo.Message) error {
+	idf, err := b.getLiveIDFIndex(sourceMessage.GuildID)
+	if err != nil {
+		return fmt.Errorf("couldn't get idf in message update: %v", err)
+	}
+	forks := idf.MessageForks(sourceMessage.ChannelID, sourceMessage.ID)
+	if len(forks) == 0 {
+		return nil
+	}
+	embed := createForkMessageEmbed(sourceMessage)
+	for _, fork := range forks {
+		if _, err := b.session.ChannelMessageEditEmbed(fork.ChannelID, fork.MessageID, embed); err != nil {
+			if restErrorCode(err) == discordgo.ErrCodeUnknownMessage {
+				//Perhaps the forked message that we saw at some point
+				//has been deleted. That's fine, just skip it!
+				continue
+			}
+			return fmt.Errorf("couldn't update forked message for source %v and target %v: %v", sourceMessage.ID, fork.MessageID, err)
+		}
+		fmt.Printf("updated message %v to %v because the message it was forked from (%v) changed", fork.MessageID, sourceMessage.Content, sourceMessage.ID)
+	}
+	return nil
+}
+
+func (b *bot) forkMessage(targetChannelID string, sourceRefs ...*discordgo.MessageReference) error {
+	for i, sourceRef := range sourceRefs {
+		//TODO: it is expensive to fetch each of these individually, especially
+		//since likely upstream we have them already.
+		msg, err := b.channelMessage(sourceRef)
+		if err != nil {
+			return fmt.Errorf("couldn't fetch message %v: %v", i, err)
+		}
+
+		embed := createForkMessageEmbed(msg)
+
+		if _, err := b.session.ChannelMessageSendEmbed(targetChannelID, embed); err != nil {
+			return fmt.Errorf("couldn't send message %v: %v", i, err)
+		}
+	}
+
+	lastSourceRef := sourceRefs[len(sourceRefs)-1]
+
+	var message string
+
+	if len(sourceRefs) == 1 {
+		message = "Forked 1 message to <#" + targetChannelID + ">. If you would have marked an earlier message with " + START_FORK_THREAD_EMOJI + " then all of the messages between the two emojis would have been forked."
+	} else {
+		message = "Forked " + strconv.Itoa(len(sourceRefs)) + " messages to <#" + targetChannelID + ">."
+	}
+
+	data := &discordgo.MessageSend{
+		Content:   message,
+		Reference: lastSourceRef,
+	}
+
+	if _, err := b.session.ChannelMessageSendComplex(lastSourceRef.ChannelID, data); err != nil {
+		return fmt.Errorf("couldn't post read out message for fork: %v", err)
+	}
+
+	return nil
+
+}
+
 func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.InteractionCreate) {
 	//NOTE: all handlers must use s.InteractionRespond or the user will see an error.
 	switch event.Interaction.Data.Name {
@@ -149,6 +507,22 @@ func (b *bot) interactionCreate(s *discordgo.Session, event *discordgo.Interacti
 	default:
 		fmt.Println("Unknown interaction name: " + event.Interaction.Data.Name)
 	}
+}
+
+func (b *bot) noteMessageIfFork(msg *discordgo.Message) error {
+	forkedFrom := messageIsForkOf(msg)
+	if forkedFrom == nil {
+		return nil
+	}
+	fmt.Printf("Indexing %v which appears to be a fork\n", msg.ID)
+
+	idf, err := b.getLiveIDFIndex(msg.GuildID)
+	if err != nil {
+		return fmt.Errorf("couldn't fetch idf: %v", err)
+	}
+	idf.NoteForkedMessage(forkedFrom, msg.Reference())
+	idf.RequestPeristence()
+	return nil
 }
 
 func (b *bot) scheduleRebuildIDFCache() {
@@ -163,12 +537,31 @@ func (b *bot) scheduleRebuildIDFCache() {
 	b.rebuildIDFTimer = time.AfterFunc(REBUILD_IDF_INTERVAL/16, b.rebuildIDFCaches)
 }
 
+func (b *bot) getLiveIDFIndex(guildID string) (*IDFIndex, error) {
+	result := b.indexes[guildID]
+	if result != nil {
+		return result, nil
+	}
+	result, err := IDFIndexForGuild(guildID, b.session)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't fetch live IDF index: %v", err)
+	}
+	b.indexes[guildID] = result
+	return result, nil
+}
+
 func (b *bot) rebuildIDFCaches() {
 	fmt.Printf("Checking if IDF caches need rebuilding\n")
+
 	for guildID := range b.infos {
-		if _, err := IDFIndexForGuild(guildID, b.session); err != nil {
-			fmt.Printf("couldn't recreate guild idf for guild %v: %v", guildID, err)
+		if !IDFIndexForGuildNeedsRebuilding(guildID) && b.indexes[guildID] != nil {
+			continue
 		}
+		idf, err := IDFIndexForGuild(guildID, b.session)
+		if err != nil {
+			fmt.Printf("couldn't recreate guild idf for guild %v: %v\n", guildID, err)
+		}
+		b.indexes[guildID] = idf
 	}
 	b.scheduleRebuildIDFCache()
 }
@@ -389,6 +782,28 @@ func (b *bot) rebuildCategoryMap(guildID string, alert bool) {
 	b.infoMutex.Unlock()
 }
 
+func (b *bot) createNewThreadInDefaultCategory(guildID string, threadName string) (*discordgo.Channel, error) {
+	infos := b.getInfos(guildID)
+	var categoryID string
+	//find at least one categoryID, defaulting to the one that is default ""
+	for id, info := range infos {
+		categoryID = id
+		if info.name == "" {
+			break
+		}
+	}
+
+	if categoryID == "" {
+		return nil, fmt.Errorf("thread is no threads category to create a thread in")
+	}
+
+	return b.controller.GuildChannelCreateComplex(guildID, discordgo.GuildChannelCreateData{
+		Name:     threadName,
+		Type:     discordgo.ChannelTypeGuildText,
+		ParentID: categoryID,
+	})
+}
+
 func numThreadsInCategory(guild *discordgo.Guild, category *discordgo.Channel) int {
 	threads := threadsInCategory(guild, category)
 	if threads == nil {
@@ -604,7 +1019,12 @@ func (g *threadGroupInfo) archiveThread(controller Controller, session *discordg
 
 //Called before the program exits when the bot should clean up, persist state, etc.
 func (b *bot) Close() {
-	//nothing to do, idf index is already persisted
+	for _, index := range b.indexes {
+		if err := index.Persist(); err != nil {
+			fmt.Printf("Couln't persist IDF %v: %v", index.guildID, err)
+			//Continue on and try to save the other ones too
+		}
+	}
 }
 
 func indexForThreadArchive(channel *discordgo.Channel) int {

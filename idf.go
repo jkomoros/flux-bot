@@ -36,7 +36,34 @@ const REBUILD_IDF_INTERVAL = time.Hour * 24
 
 //This number should be incremetned every time the format of the JSON cache
 //changes, so old caches will be discarded.
-const IDF_JSON_FORMAT_VERSION = 2
+const IDF_JSON_FORMAT_VERSION = 5
+
+type packedMessageReference string
+
+const PACKED_MESSAGE_REFERENCE_DELIMITER = "+"
+
+func (p packedMessageReference) MessageID() string {
+	return strings.Split(string(p), PACKED_MESSAGE_REFERENCE_DELIMITER)[1]
+}
+
+func (p packedMessageReference) ChannelID() string {
+	return strings.Split(string(p), PACKED_MESSAGE_REFERENCE_DELIMITER)[0]
+}
+
+func (p packedMessageReference) ToMessageReference() *discordgo.MessageReference {
+	parts := strings.Split(string(p), PACKED_MESSAGE_REFERENCE_DELIMITER)
+	if len(parts) != 2 {
+		return nil
+	}
+	return &discordgo.MessageReference{
+		ChannelID: parts[0],
+		MessageID: parts[1],
+	}
+}
+
+func packMessageReference(ref *discordgo.MessageReference) packedMessageReference {
+	return packedMessageReference(ref.ChannelID + PACKED_MESSAGE_REFERENCE_DELIMITER + ref.MessageID)
+}
 
 //STOP_WORDS are words that are so common that we should basically skip them. We
 //skip them when generating multi-word queries, and also for considering words
@@ -225,6 +252,10 @@ func (t *TFIDF) AutoTopWords(maxCount int) []string {
 		fmt.Printf("maxDropIndex: %v, total words: %v\n", maxDropIndex, rawWords[:maxDropIndex])
 	}
 
+	if maxDropIndex > len(rawWords) {
+		maxDropIndex = len(rawWords)
+	}
+
 	return t.restemWords(rawWords[:maxDropIndex])
 }
 
@@ -364,15 +395,18 @@ type idfIndexJSON struct {
 	DocumentCount int `json:"documentCount"`
 	//Map of stemmedWord --> number of documents that have that word at least
 	//once
-	DocumentWordCounts map[string]int `json:"documentWordCounts"`
-	FormatVersion      int            `json:"formatVersion"`
+	DocumentWordCounts map[string]int                                      `json:"documentWordCounts"`
+	FormatVersion      int                                                 `json:"formatVersion"`
+	ForkedMessageIndex map[packedMessageReference][]packedMessageReference `json:"forkedMessageIndex"`
+	GeneratedTimestamp time.Time                                           `json:"generatedTimestamp"`
 }
 
 //IDFIndex stores information for calculating IDF of a thread. Get a new one
 //from NewIDFIndex.
 type IDFIndex struct {
-	data    *idfIndexJSON
-	guildID string
+	data       *idfIndexJSON
+	guildID    string
+	futureSave *time.Timer
 }
 
 //IDFIndexForGuild returns either a preexisting IDF index from disk cache or a
@@ -384,41 +418,63 @@ func IDFIndexForGuild(guildID string, session *discordgo.Session) (*IDFIndex, er
 	return BuildIDFIndex(guildID, session)
 }
 
-func LoadIDFIndex(guildID string) *IDFIndex {
-
-	var path string
-
+func IDFIndexForGuildNeedsRebuilding(guildID string) bool {
 	if useDebugIDFCache {
-		path = DEBUG_IDF_CACHE_FILENAME
-	} else {
-		folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
-		path = filepath.Join(folderPath, guildID+".json")
-		if st, err := os.Stat(path); os.IsNotExist(err) {
-			return nil
-		} else {
-			if time.Now().After(st.ModTime().Add(REBUILD_IDF_INTERVAL)) {
-				fmt.Printf("IDF cache was found but it was too old, discarding.\n")
-				return nil
-			}
-		}
+		return false
 	}
+
+	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
+	path := filepath.Join(folderPath, guildID+".json")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return true
+	}
+
+	data := fetchIDFBlob(guildID)
+
+	if data == nil {
+		return true
+	}
+
+	if time.Now().After(data.GeneratedTimestamp.Add(REBUILD_IDF_INTERVAL)) {
+		fmt.Printf("IDF cache was found but it was too old, discarding.\n")
+		return true
+	}
+	return false
+}
+
+//fetchIDFblob fetches the blob with no error checking.
+func fetchIDFBlob(guildID string) *idfIndexJSON {
+	folderPath := filepath.Join(CACHE_PATH, IDF_CACHE_PATH)
+	path := filepath.Join(folderPath, guildID+".json")
+
 	blob, err := ioutil.ReadFile(path)
 	if err != nil {
-		fmt.Printf("couldn't read json file for %v: %v", guildID, err)
+		fmt.Printf("couldn't read json file for %v: %v\n", guildID, err)
 		return nil
 	}
 	var result idfIndexJSON
 	if err := json.Unmarshal(blob, &result); err != nil {
-		fmt.Printf("couldn't unmarshal json for %v: %v", guildID, err)
+		fmt.Printf("couldn't unmarshal json for %v: %v\n", guildID, err)
 		return nil
 	}
+	return &result
+}
+
+func LoadIDFIndex(guildID string) *IDFIndex {
+
+	if IDFIndexForGuildNeedsRebuilding(guildID) {
+		return nil
+	}
+
+	result := fetchIDFBlob(guildID)
+
 	if result.FormatVersion != IDF_JSON_FORMAT_VERSION {
 		fmt.Printf("%v IDF cache file had old version %v, expected %v, discarding\n", guildID, result.FormatVersion, IDF_JSON_FORMAT_VERSION)
 		return nil
 	}
 	fmt.Printf("Reloading guild IDF cachce for %v\n", guildID)
 	return &IDFIndex{
-		data:    &result,
+		data:    result,
 		guildID: guildID,
 	}
 }
@@ -465,6 +521,7 @@ func newIDFIndex(guildID string) *IDFIndex {
 	data := &idfIndexJSON{
 		DocumentCount:      0,
 		DocumentWordCounts: make(map[string]int),
+		ForkedMessageIndex: make(map[packedMessageReference][]packedMessageReference),
 		FormatVersion:      IDF_JSON_FORMAT_VERSION,
 	}
 	return &IDFIndex{
@@ -501,13 +558,32 @@ func BuildIDFIndex(guildID string, session *discordgo.Session) (*IDFIndex, error
 	}
 	fmt.Printf("Done rebuilding IDF for Guild %v(%v)\n", guild.Name, guild.ID)
 
+	result.data.GeneratedTimestamp = time.Now()
+
 	//Save this so we don't have to do it again later
 	if err := result.Persist(); err != nil {
 		//This is not a problem to report that widely
-		fmt.Printf("couldn't persist idf index for guildID %v: %v", guildID, err)
+		fmt.Printf("couldn't persist idf index for guildID %v: %v\n", guildID, err)
 	}
 
 	return result, nil
+}
+
+const AUTO_SAVE_INTERVAL = time.Minute * 5
+
+//Requests a persistence to be done in the near future, batched up so it doesn't happen all that often.
+func (i *IDFIndex) RequestPeristence() {
+	if i.futureSave != nil {
+		return
+	}
+	i.futureSave = time.AfterFunc(AUTO_SAVE_INTERVAL, func() {
+		if err := i.Persist(); err != nil {
+			fmt.Printf("couldn't autosave idf index %v: %v\n", i.guildID, err)
+		} else {
+			fmt.Printf("Autosaved %v IDF\n", i.guildID)
+		}
+		i.futureSave = nil
+	})
 }
 
 //Persist persists the cache to disk. Load it back up later with guildID.
@@ -539,6 +615,84 @@ func (i *IDFIndex) DocumentCount() int {
 	return i.data.DocumentCount
 }
 
+func (i *IDFIndex) NoteMessageDeleted(messageID string) {
+	//Very similar implementation in NoteChannelDeleted
+	for from, tos := range i.data.ForkedMessageIndex {
+		if from.MessageID() == messageID {
+			delete(i.data.ForkedMessageIndex, from)
+			continue
+		}
+		needsDeletion := false
+		for _, to := range tos {
+			if to.MessageID() == messageID {
+				needsDeletion = true
+				break
+			}
+		}
+		if !needsDeletion {
+			continue
+		}
+		var updatedTos []packedMessageReference
+		for _, to := range tos {
+			if to.MessageID() == messageID {
+				continue
+			}
+			updatedTos = append(updatedTos, to)
+		}
+		i.data.ForkedMessageIndex[from] = updatedTos
+	}
+}
+
+func (i *IDFIndex) NoteChannelDeleted(channelID string) {
+	//Very similar implementation in NoteMessageDeleted
+	for from, tos := range i.data.ForkedMessageIndex {
+		if from.ChannelID() == channelID {
+			delete(i.data.ForkedMessageIndex, from)
+			continue
+		}
+		needsDeletion := false
+		for _, to := range tos {
+			if to.ChannelID() == channelID {
+				needsDeletion = true
+				break
+			}
+		}
+		if !needsDeletion {
+			continue
+		}
+		var updatedTos []packedMessageReference
+		for _, to := range tos {
+			if to.ChannelID() == channelID {
+				continue
+			}
+			updatedTos = append(updatedTos, to)
+		}
+		i.data.ForkedMessageIndex[from] = updatedTos
+	}
+}
+
+func (i *IDFIndex) NoteForkedMessage(from, to *discordgo.MessageReference) {
+	packedRef := packMessageReference(from)
+	i.data.ForkedMessageIndex[packedRef] = append(i.data.ForkedMessageIndex[packedRef], packMessageReference(to))
+}
+
+func (i *IDFIndex) MessageForks(channelID, messageID string) []*discordgo.MessageReference {
+	ref := &discordgo.MessageReference{
+		ChannelID: channelID,
+		MessageID: messageID,
+	}
+	packedRef := packMessageReference(ref)
+	forks := i.data.ForkedMessageIndex[packedRef]
+	if len(forks) == 0 {
+		return nil
+	}
+	var result []*discordgo.MessageReference
+	for _, fork := range forks {
+		result = append(result, fork.ToMessageReference())
+	}
+	return result
+}
+
 //ProcessMessage will process a given message and update the index.
 func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	if message == nil {
@@ -548,6 +702,11 @@ func (i *IDFIndex) ProcessMessage(message *discordgo.Message) {
 	if message.Type != discordgo.MessageTypeDefault && message.Type != discordgo.MessageTypeReply {
 		return
 	}
+
+	if forkedFromMessageRef := messageIsForkOf(message); forkedFromMessageRef != nil {
+		i.NoteForkedMessage(forkedFromMessageRef, message.Reference())
+	}
+
 	words := extractWordsFromContent(message.Content)
 
 	wordSet := make(map[string]bool)
