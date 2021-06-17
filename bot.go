@@ -101,17 +101,17 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 	b.setGuildNeedsInfoRegeneration(event.Guild.ID)
 	guildInfos := b.getInfos(event.Guild.ID)
 	if guildInfos == nil {
-		fmt.Printf("Couldn't find guild with ID %v", event.Guild.ID)
+		fmt.Printf("Couldn't find guild with ID %v\n", event.Guild.ID)
 	}
 	for _, group := range guildInfos {
 		if err := group.archiveThreadsIfNecessary(b.controller, b.session); err != nil {
-			fmt.Printf("Couldn't archive extra threads on boot: %v", err)
+			fmt.Printf("Couldn't archive extra threads on boot: %v\n", err)
 		}
 	}
 	//ensure that an IDF index exists, or build it now so we'll have it if we need it
 	idf, err := IDFIndexForGuild(event.Guild.ID, s)
 	if err != nil {
-		fmt.Printf("couldn't fetch idf for guild %v: %v", event.Guild.ID, err)
+		fmt.Printf("couldn't fetch idf for guild %v: %v\n", event.Guild.ID, err)
 	}
 	b.indexes[event.Guild.ID] = idf
 }
@@ -120,7 +120,7 @@ func (b *bot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate) {
 
 	if err := b.noteMessageIfFork(event.Message); err != nil {
-		fmt.Printf("couldn't note forked message: %v", err)
+		fmt.Printf("couldn't note forked message: %v\n", err)
 	}
 
 	channel, err := s.State.Channel(event.ChannelID)
@@ -132,14 +132,14 @@ func (b *bot) messageCreate(s *discordgo.Session, event *discordgo.MessageCreate
 		return
 	}
 	if err := b.moveThreadToTopOfThreads(channel); err != nil {
-		fmt.Printf("message received in a thread but couldn't move it: %v", err)
+		fmt.Printf("message received in a thread but couldn't move it: %v\n", err)
 	}
 }
 
 // discordgo callback: called after the when a message is edited
 func (b *bot) messageUpdate(s *discordgo.Session, event *discordgo.MessageUpdate) {
 	if err := b.updateForkedMessages(event.Message); err != nil {
-		fmt.Printf("couldn't update forked messages if any existed: %v", err)
+		fmt.Printf("couldn't update forked messages if any existed: %v\n", err)
 	}
 }
 
@@ -174,7 +174,7 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 		return
 	}
 	if err := b.moveThreadToTopOfThreads(channel); err != nil {
-		fmt.Printf("message received in a thread but couldn't move it: %v", err)
+		fmt.Printf("message received in a thread but couldn't move it: %v\n", err)
 	}
 	guildInfos := b.getInfos(event.GuildID)
 	if guildInfos == nil {
@@ -183,7 +183,7 @@ func (b *bot) channelCreate(s *discordgo.Session, event *discordgo.ChannelCreate
 	}
 	for _, group := range guildInfos {
 		if err := group.archiveThreadsIfNecessary(b.controller, b.session); err != nil {
-			fmt.Printf("Couldn't archive threads if necessary: %v", err)
+			fmt.Printf("Couldn't archive threads if necessary: %v\n", err)
 		}
 	}
 }
@@ -213,7 +213,7 @@ func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageR
 		}
 	default:
 		if err := b.updateForkedMessagesIfTheyExist(ref); err != nil {
-			fmt.Printf("Couldn't update forks if they exist: %v", err)
+			fmt.Printf("Couldn't update forks if they exist: %v\n", err)
 		}
 	}
 }
@@ -221,14 +221,14 @@ func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageR
 func (b *bot) messageReactionRemove(s *discordgo.Session, event *discordgo.MessageReactionRemove) {
 	ref := messageReference(event.GuildID, event.ChannelID, event.MessageID)
 	if err := b.updateForkedMessagesIfTheyExist(ref); err != nil {
-		fmt.Printf("Couldn't update forks if they exist: %v", err)
+		fmt.Printf("Couldn't update forks if they exist: %v\n", err)
 	}
 }
 
 func (b *bot) messageReactionsRemoveAll(s *discordgo.Session, event *discordgo.MessageReactionRemoveAll) {
 	ref := messageReference(event.GuildID, event.ChannelID, event.MessageID)
 	if err := b.updateForkedMessagesIfTheyExist(ref); err != nil {
-		fmt.Printf("Couldn't update forks if they exist: %v", err)
+		fmt.Printf("Couldn't update forks if they exist: %v\n", err)
 	}
 }
 
@@ -240,6 +240,22 @@ func (b *bot) forkThreadViaEmojiToNewThread(ref *discordgo.MessageReference) err
 	msg, err := b.channelMessage(ref)
 	if err != nil {
 		return fmt.Errorf("couldn't fetch full message to fork: %v", err)
+	}
+
+	//Check if the message already had a thread emoji and this is another one;
+	//if so , don't start a new thread. It's weird to do this here, but we don't
+	//have the reaction count on the message until fetching the message here.
+	for _, reaction := range msg.Reactions {
+		if reaction.Emoji == nil {
+			continue
+		}
+		if reaction.Emoji.Name != FORK_THREAD_EMOJI {
+			continue
+		}
+		if reaction.Count > 1 {
+			fmt.Printf("Didn't fork message because there was already one " + FORK_THREAD_EMOJI + "\n")
+			return nil
+		}
 	}
 
 	//previousMessages will be most recent to least recent by default
@@ -453,7 +469,7 @@ func (b *bot) updateForkedMessages(sourceMessage *discordgo.Message) error {
 			}
 			return fmt.Errorf("couldn't update forked message for source %v and target %v: %v", sourceMessage.ID, fork.MessageID, err)
 		}
-		fmt.Printf("updated message %v to %v because the message it was forked from (%v) changed", fork.MessageID, sourceMessage.Content, sourceMessage.ID)
+		fmt.Printf("updated message %v to %v because the message it was forked from (%v) changed\n", fork.MessageID, sourceMessage.Content, sourceMessage.ID)
 	}
 	return nil
 }
@@ -616,7 +632,7 @@ func (b *bot) archiveThreadInteraction(s *discordgo.Session, event *discordgo.In
 	channel, err := b.session.State.Channel(event.ChannelID)
 	if err != nil {
 		//TODO: respond to the interaction in the canonical way so it shows up in user's UI
-		fmt.Printf("Couldn't fetch channel %v: %v", event.ChannelID, err)
+		fmt.Printf("Couldn't fetch channel %v: %v\n", event.ChannelID, err)
 		return
 	}
 	message := "Couldn't archive: "
@@ -1021,7 +1037,7 @@ func (g *threadGroupInfo) archiveThread(controller Controller, session *discordg
 func (b *bot) Close() {
 	for _, index := range b.indexes {
 		if err := index.Persist(); err != nil {
-			fmt.Printf("Couln't persist IDF %v: %v", index.guildID, err)
+			fmt.Printf("Couln't persist IDF %v: %v\n", index.guildID, err)
 			//Continue on and try to save the other ones too
 		}
 	}
