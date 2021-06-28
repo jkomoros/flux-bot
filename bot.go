@@ -259,7 +259,7 @@ func (b *bot) forkThreadViaEmojiToNewThread(ref *discordgo.MessageReference) err
 	}
 
 	//previousMessages will be most recent to least recent by default
-	previousMessages, err := b.session.ChannelMessages(ref.ChannelID, MESSAGES_TO_FETCH, ref.MessageID, "", "")
+	previousMessages, err := channelMessagesWithGuildID(b.session, ref.GuildID, ref.ChannelID, MESSAGES_TO_FETCH, ref.MessageID, "", "")
 	if err != nil {
 		return fmt.Errorf("couldn't fetch previous messages: %v", err)
 	}
@@ -333,6 +333,18 @@ func (b *bot) forkThreadViaEmojiToNewThread(ref *discordgo.MessageReference) err
 	return nil
 }
 
+//session.channelMessages doesn't include GuildID. This sets it. See also bot.channelMessage()
+func channelMessagesWithGuildID(session *discordgo.Session, guildID, channelID string, limit int, before, after, around string) ([]*discordgo.Message, error) {
+	msgs, err := session.ChannelMessages(channelID, limit, before, after, around)
+	if err != nil {
+		return nil, err
+	}
+	for _, msg := range msgs {
+		msg.GuildID = guildID
+	}
+	return msgs, nil
+}
+
 func urlForMessage(message *discordgo.Message) string {
 	return "https://discord.com/channels/" + message.GuildID + "/" + message.ChannelID + "/" + message.ID
 }
@@ -403,7 +415,7 @@ func createForkMessageEmbed(msg *discordgo.Message) *discordgo.MessageEmbed {
 //channelRef is a wrapper around session.ChannelMessage. The Discord API for
 //some reason omits GuildID for messages fetched via ChannelMessage, but other
 //processing assumes it exists. This method will fetch it but also stuff the
-//GuildID in.
+//GuildID in. See also channelMessagesWithGuildID
 func (b *bot) channelMessage(ref *discordgo.MessageReference) (*discordgo.Message, error) {
 	//OK, it has forks, we need to fetch the updated message.
 	msg, err := b.session.ChannelMessage(ref.ChannelID, ref.MessageID)

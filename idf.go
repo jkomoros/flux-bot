@@ -499,7 +499,7 @@ func FetchAllMessagesForChannel(session *discordgo.Session, channel *discordgo.C
 	for continueFetching {
 		fmt.Println("Fetching a batch of messages before " + lastMessageID)
 		//lastMessageID will be excluded
-		messages, err := session.ChannelMessages(channel.ID, MESSAGES_TO_FETCH, lastMessageID, "", "")
+		messages, err := channelMessagesWithGuildID(session, channel.GuildID, channel.ID, MESSAGES_TO_FETCH, lastMessageID, "", "")
 		if err != nil {
 			return nil, fmt.Errorf("couldn't fetch messages around %v: %w", lastMessageID, err)
 		}
