@@ -208,7 +208,7 @@ func (b *bot) messageReactionAdd(s *discordgo.Session, event *discordgo.MessageR
 	ref := messageReference(event.GuildID, event.ChannelID, event.MessageID)
 	switch event.Emoji.Name {
 	case FORK_THREAD_EMOJI:
-		if err := b.forkThreadViaEmojiToNewThread(ref); err != nil {
+		if err := b.forkThreadViaEmojiToNewThread(ref, event.UserID); err != nil {
 			fmt.Printf("couldn't fork thread: %v\n", err)
 		}
 	default:
@@ -232,7 +232,7 @@ func (b *bot) messageReactionsRemoveAll(s *discordgo.Session, event *discordgo.M
 	}
 }
 
-func (b *bot) forkThreadViaEmojiToNewThread(ref *discordgo.MessageReference) error {
+func (b *bot) forkThreadViaEmojiToNewThread(ref *discordgo.MessageReference, userID string) error {
 	if disableEmojiFork {
 		return nil
 	}
@@ -326,7 +326,7 @@ func (b *bot) forkThreadViaEmojiToNewThread(ref *discordgo.MessageReference) err
 		refs[i] = msg.Reference()
 	}
 
-	if err := b.forkMessage(thread.ID, refs...); err != nil {
+	if err := b.forkMessage(thread.ID, userID, refs...); err != nil {
 		return fmt.Errorf("couldn't fork message: %v", err)
 	}
 
@@ -486,7 +486,18 @@ func (b *bot) updateForkedMessages(sourceMessage *discordgo.Message) error {
 	return nil
 }
 
-func (b *bot) forkMessage(targetChannelID string, sourceRefs ...*discordgo.MessageReference) error {
+func (b *bot) forkMessage(targetChannelID string, userID string, sourceRefs ...*discordgo.MessageReference) error {
+
+	if len(sourceRefs) == 0 {
+		return nil
+	}
+
+	firstRef := sourceRefs[0]
+
+	if _, err := b.session.ChannelMessageSend(targetChannelID, "Forking messages from <#"+firstRef.ChannelID+"> because of a "+FORK_THREAD_EMOJI+" reaction by <@"+userID+">. If you don't like the auto-generated title, you can change it."); err != nil {
+		return fmt.Errorf("couldn't post initial thread messagae: %v", err)
+	}
+
 	for i, sourceRef := range sourceRefs {
 		//TODO: it is expensive to fetch each of these individually, especially
 		//since likely upstream we have them already.
