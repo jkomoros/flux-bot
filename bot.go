@@ -391,7 +391,7 @@ func createForkMessageEmbed(msg *discordgo.Message) *discordgo.MessageEmbed {
 		if reaction.Emoji.Name == START_FORK_THREAD_EMOJI {
 			continue
 		}
-		emojiDescriptions = append(emojiDescriptions, reaction.Emoji.Name+" : "+strconv.Itoa(reaction.Count))
+		emojiDescriptions = append(emojiDescriptions, reaction.Emoji.MessageFormat()+" : "+strconv.Itoa(reaction.Count))
 	}
 	var fields []*discordgo.MessageEmbedField
 	if len(emojiDescriptions) > 0 {
